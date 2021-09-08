@@ -157,6 +157,10 @@ impl IndexMut<usize> for Vec3 {
     }
 }
 
+pub(crate) fn lerp(t: f64, a: Vec3, b: Vec3) -> Vec3 {
+    (1.0 - t) * a + t * b
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
