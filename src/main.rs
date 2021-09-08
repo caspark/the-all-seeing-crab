@@ -1,5 +1,6 @@
 extern crate derive_more;
 
+mod ray;
 mod vec3;
 
 use vec3::{Color, Point3, Vec3};

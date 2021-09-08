@@ -27,11 +27,11 @@ pub(crate) type Point3 = Vec3;
 pub(crate) type Color = Vec3;
 
 impl Vec3 {
-    pub fn zero() -> Self {
+    pub(crate) fn zero() -> Self {
         Default::default()
     }
 
-    pub fn one() -> Self {
+    pub(crate) fn one() -> Self {
         Vec3 {
             x: 1.0,
             y: 1.0,
@@ -39,19 +39,19 @@ impl Vec3 {
         }
     }
 
-    pub fn length_squared(&self) -> f64 {
+    pub(crate) fn length_squared(&self) -> f64 {
         self.x * self.x + self.y * self.y + self.z * self.z
     }
 
-    pub fn length(&self) -> f64 {
+    pub(crate) fn length(&self) -> f64 {
         self.length_squared().sqrt()
     }
 
-    pub fn dot(&self, other: Vec3) -> f64 {
+    pub(crate) fn dot(&self, other: Vec3) -> f64 {
         self.x * other.x + self.y * other.y + self.z * other.z
     }
 
-    pub fn cross(&self, other: Vec3) -> Vec3 {
+    pub(crate) fn cross(&self, other: Vec3) -> Vec3 {
         Vec3 {
             x: self.y * other.z - self.z * other.y,
             y: self.z * other.x - self.x * other.z,
@@ -59,11 +59,11 @@ impl Vec3 {
         }
     }
 
-    pub fn to_unit(&self) -> Vec3 {
+    pub(crate) fn to_unit(&self) -> Vec3 {
         *self / self.length()
     }
 
-    pub fn as_color(&self) -> String {
+    pub(crate) fn as_color(&self) -> String {
         format!(
             "{r} {g} {b}\n",
             r = (255.999 * self.x) as i32,
