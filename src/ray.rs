@@ -11,6 +11,7 @@ impl Ray {
         Self { orig, dir }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn origin(&self) -> Point3 {
         self.orig
     }
@@ -19,6 +20,7 @@ impl Ray {
         self.dir
     }
 
+    #[allow(dead_code)]
     pub(crate) fn at(&self, t: f64) -> Point3 {
         self.orig + self.dir * t
     }

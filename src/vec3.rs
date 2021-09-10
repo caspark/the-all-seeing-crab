@@ -27,10 +27,12 @@ pub(crate) type Point3 = Vec3;
 pub(crate) type Color = Vec3;
 
 impl Vec3 {
+    #[allow(dead_code)]
     pub(crate) fn zero() -> Self {
         Default::default()
     }
 
+    #[allow(dead_code)]
     pub(crate) fn one() -> Self {
         Vec3 {
             x: 1.0,
@@ -47,10 +49,12 @@ impl Vec3 {
         self.length_squared().sqrt()
     }
 
+    #[allow(dead_code)]
     pub(crate) fn dot(&self, other: Vec3) -> f64 {
         self.x * other.x + self.y * other.y + self.z * other.z
     }
 
+    #[allow(dead_code)]
     pub(crate) fn cross(&self, other: Vec3) -> Vec3 {
         Vec3 {
             x: self.y * other.z - self.z * other.y,
