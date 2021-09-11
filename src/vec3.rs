@@ -49,7 +49,6 @@ impl Vec3 {
         self.length_squared().sqrt()
     }
 
-    #[allow(dead_code)]
     pub(crate) fn dot(&self, other: Vec3) -> f64 {
         self.x * other.x + self.y * other.y + self.z * other.z
     }

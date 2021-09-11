@@ -11,7 +11,6 @@ impl Ray {
         Self { orig, dir }
     }
 
-    #[allow(dead_code)]
     pub(crate) fn origin(&self) -> Point3 {
         self.orig
     }
