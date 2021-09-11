@@ -2,4 +2,6 @@
 
 set -eux
 
-exec env RUST_BACKTRACE=1 cargo run --release
+cargo build --release
+
+exec env RUST_BACKTRACE=1 time target/release/raytracer "$1"

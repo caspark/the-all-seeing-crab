@@ -1,6 +1,8 @@
 mod ray;
 mod vec3;
 
+use std::env;
+
 use ray::Ray;
 use rgb::RGB8;
 use vec3::{lerp, Color, Point3, Vec3};
@@ -26,6 +28,24 @@ fn ray_color(r: Ray) -> Color {
 }
 
 fn main() {
+    let args: Vec<String> = env::args().collect();
+    match args[..] {
+        [] => panic!("Could not extract executable name as first arg"),
+        [ref exe] => print_usage_then_die(&exe, "output file expected as first argument"),
+        [_, ref image_filename] => run(image_filename),
+        [ref exe, _, ..] => print_usage_then_die(&exe, "Max one argument expected"),
+    };
+}
+
+fn print_usage_then_die(exe: &str, error: &str) {
+    eprintln!("Error: {}", error);
+    eprintln!("Usage:");
+    eprintln!("    {} OUTPUT_FILE", exe);
+
+    std::process::exit(1);
+}
+
+fn run(image_filename: &str) {
     // image
     let aspect_ratio: f64 = 16.0 / 9.0;
     let image_width: i32 = 400;
@@ -54,7 +74,6 @@ fn main() {
     let vertical = Vec3::new(0.0, viewport_height, 0.0);
     let lower_left_corner =
         origin - horizontal / 2.0 - vertical / 2.0 - Vec3::new(0.0, 0.0, focal_length);
-    dbg!(lower_left_corner);
 
     let mut image_buffer = Vec::<RGB8>::with_capacity(image_pixel_count);
     for j in (0..image_height).rev() {
@@ -79,9 +98,9 @@ fn main() {
     }
     debug_assert_eq!(image_buffer.len(), image_pixel_count);
 
-    eprintln!("Saving result to disk as png...");
+    eprintln!("Saving result to disk at {} as png...", image_filename);
     lodepng::encode_file(
-        "output.png",
+        image_filename,
         &image_buffer,
         image_width as usize,
         image_height as usize,
