@@ -65,15 +65,6 @@ impl Vec3 {
     pub(crate) fn to_unit(&self) -> Vec3 {
         *self / self.length()
     }
-
-    pub(crate) fn as_color(&self) -> String {
-        format!(
-            "{r} {g} {b}\n",
-            r = (255.999 * self.x) as i32,
-            g = (255.999 * self.y) as i32,
-            b = (255.999 * self.z) as i32
-        )
-    }
 }
 
 impl Into<Vec3> for [f64; 3] {

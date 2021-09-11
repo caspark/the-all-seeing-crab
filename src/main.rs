@@ -1,9 +1,8 @@
-extern crate derive_more;
-
 mod ray;
 mod vec3;
 
 use ray::Ray;
+use rgb::RGB8;
 use vec3::{lerp, Color, Point3, Vec3};
 
 fn hit_sphere(center: Point3, radius: f64, r: Ray) -> bool {
@@ -31,10 +30,12 @@ fn main() {
     let aspect_ratio: f64 = 16.0 / 9.0;
     let image_width: i32 = 400;
     let image_height: i32 = (image_width as f64 / aspect_ratio) as i32;
+    let image_pixel_count = (image_width * image_height) as usize;
     eprintln!(
-        "Image is {width}x{height}",
+        "Image is {width}x{height} (total {count} pixels)",
         width = image_width,
-        height = image_height
+        height = image_height,
+        count = image_pixel_count
     );
 
     // camera
@@ -55,13 +56,8 @@ fn main() {
         origin - horizontal / 2.0 - vertical / 2.0 - Vec3::new(0.0, 0.0, focal_length);
     dbg!(lower_left_corner);
 
-    println!(
-        "P3\n{width} {height}\n255",
-        width = image_width,
-        height = image_height
-    );
-
-    for j in (0..(image_height - 1)).rev() {
+    let mut image_buffer = Vec::<RGB8>::with_capacity(image_pixel_count);
+    for j in (0..image_height).rev() {
         if j % 100 == 0 {
             eprintln!("Scanlines remaining: {j}", j = j);
         }
@@ -74,8 +70,25 @@ fn main() {
             );
 
             let pixel: Color = ray_color(r);
-            print!("{}", pixel.as_color());
+            image_buffer.push(RGB8 {
+                r: (pixel.x * 255.9999) as u8,
+                g: (pixel.y * 255.9999) as u8,
+                b: (pixel.z * 255.9999) as u8,
+            });
         }
     }
+    debug_assert_eq!(image_buffer.len(), image_pixel_count);
+
+    eprintln!("Saving result to disk as png...");
+    lodepng::encode_file(
+        "output.png",
+        &image_buffer,
+        image_width as usize,
+        image_height as usize,
+        lodepng::ColorType::RGB,
+        8,
+    )
+    .expect("Encoding result and saving to disk failed");
+
     eprintln!("Done.");
 }

@@ -7,3 +7,5 @@ edition = "2018"
 
 [dependencies]
 derive_more = "0.99.9"
+rgb = "0.8.25"
+lodepng = "3.4"
