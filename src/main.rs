@@ -12,6 +12,10 @@ use vec3::{lerp, Color, Point3, Vec3};
 
 use crate::sphere::Sphere;
 
+fn random_double(min: f64, max: f64) -> f64 {
+    min + (max - min) * rand::random::<f64>()
+}
+
 fn ray_color(r: &Ray, world: &HittableList) -> Color {
     if let Some(rec) = world.hit(r, 0.0, INFINITY) {
         return 0.5 * (rec.normal + Color::new(1.0, 1.0, 1.0));
