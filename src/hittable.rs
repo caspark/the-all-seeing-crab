@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use crate::{
     ray::Ray,
     vec3::{Point3, Vec3},
@@ -35,18 +33,14 @@ pub(crate) trait Hittable {
     fn hit(&self, r: &Ray, t_min: f64, t_max: f64) -> Option<HitRecord>;
 }
 
-#[derive(Clone, Default)]
+#[derive(Default)]
 pub(crate) struct HittableList {
-    pub objects: Vec<Rc<Box<dyn Hittable>>>,
+    pub objects: Vec<Box<dyn Hittable>>,
 }
 
 impl HittableList {
-    pub(crate) fn clear(&mut self) {
-        self.objects.clear();
-    }
-
     pub(crate) fn add(&mut self, object: Box<dyn Hittable>) {
-        self.objects.push(Rc::new(object))
+        self.objects.push(object)
     }
 }
 

@@ -3,7 +3,7 @@ mod ray;
 mod sphere;
 mod vec3;
 
-use std::{env, f64::INFINITY, fmt::Debug};
+use std::{env, f64::INFINITY};
 
 use hittable::{Hittable, HittableList};
 use ray::Ray;
