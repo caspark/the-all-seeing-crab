@@ -28,9 +28,9 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     match args[..] {
         [] => panic!("Could not extract executable name as first arg"),
-        [ref exe] => print_usage_then_die(&exe, "output file expected as first argument"),
+        [ref exe] => print_usage_then_die(exe, "output file expected as first argument"),
         [_, ref image_filename] => run(image_filename),
-        [ref exe, _, ..] => print_usage_then_die(&exe, "Max one argument expected"),
+        [ref exe, _, ..] => print_usage_then_die(exe, "Max one argument expected"),
     };
 }
 

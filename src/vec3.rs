@@ -63,14 +63,14 @@ impl Vec3 {
         }
     }
 
-    pub(crate) fn to_unit(&self) -> Vec3 {
-        *self / self.length()
+    pub(crate) fn to_unit(self) -> Vec3 {
+        self / self.length()
     }
 }
 
-impl Into<Vec3> for [f64; 3] {
-    fn into(self) -> Vec3 {
-        Vec3::new(self[0], self[1], self[2])
+impl From<[f64; 3]> for Vec3 {
+    fn from(a: [f64; 3]) -> Self {
+        Vec3::new(a[0], a[1], a[2])
     }
 }
 
