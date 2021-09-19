@@ -3,32 +3,18 @@ mod ray;
 mod sphere;
 mod vec3;
 
-use std::env;
+use std::{env, f64::INFINITY, fmt::Debug};
 
+use hittable::{Hittable, HittableList};
 use ray::Ray;
 use rgb::RGB8;
 use vec3::{lerp, Color, Point3, Vec3};
 
-fn hit_sphere(center: Point3, radius: f64, r: Ray) -> f64 {
-    let oc = r.origin() - center;
-    let a = r.direction().length_squared();
-    let half_b = oc.dot(r.direction());
-    let c = oc.length_squared() - radius * radius;
-    let discriminant = half_b * half_b - a * c;
+use crate::sphere::Sphere;
 
-    if discriminant < 0.0 {
-        -1.0
-    } else {
-        (-half_b - discriminant.sqrt()) / a
-    }
-}
-
-fn ray_color(r: Ray) -> Color {
-    let circle_center = Point3::new(0.0, 0.0, -1.0);
-    let t = hit_sphere(circle_center, 0.5, r);
-    if t > 0.0 {
-        let n = r.at(t) - circle_center;
-        return 0.5 * Color::new(n.x + 1.0, n.y + 1.0, n.z + 1.0);
+fn ray_color(r: &Ray, world: &HittableList) -> Color {
+    if let Some(rec) = world.hit(r, 0.0, INFINITY) {
+        return 0.5 * (rec.normal + Color::new(1.0, 1.0, 1.0));
     }
 
     let unit_direction = r.direction().to_unit();
@@ -69,6 +55,11 @@ fn run(image_filename: &str) {
         count = image_pixel_count
     );
 
+    // world
+    let mut world = HittableList::default();
+    world.add(Box::new(Sphere::new(Point3::new(0.0, 0.0, -1.0), 0.5)));
+    world.add(Box::new(Sphere::new(Point3::new(0.0, -100.5, -1.0), 100.0)));
+
     // camera
     let viewport_height: f64 = 2.0;
     let viewport_width: f64 = aspect_ratio * viewport_height;
@@ -99,7 +90,7 @@ fn run(image_filename: &str) {
                 lower_left_corner + u * horizontal + v * vertical - origin,
             );
 
-            let pixel: Color = ray_color(r);
+            let pixel: Color = ray_color(&r, &world);
             image_buffer.push(RGB8 {
                 r: (pixel.x * 255.9999) as u8,
                 g: (pixel.y * 255.9999) as u8,

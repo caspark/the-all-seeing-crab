@@ -35,6 +35,7 @@ pub(crate) trait Hittable {
     fn hit(&self, r: &Ray, t_min: f64, t_max: f64) -> Option<HitRecord>;
 }
 
+#[derive(Clone, Default)]
 pub(crate) struct HittableList {
     pub objects: Vec<Rc<Box<dyn Hittable>>>,
 }
@@ -44,7 +45,7 @@ impl HittableList {
         self.objects.clear();
     }
 
-    pub(crate) fn push(&mut self, object: Box<dyn Hittable>) {
+    pub(crate) fn add(&mut self, object: Box<dyn Hittable>) {
         self.objects.push(Rc::new(object))
     }
 }
