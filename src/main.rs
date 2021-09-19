@@ -1,3 +1,5 @@
+mod camera;
+mod color;
 mod hittable;
 mod ray;
 mod sphere;
@@ -8,9 +10,9 @@ use std::{env, f64::INFINITY};
 use hittable::{Hittable, HittableList};
 use ray::Ray;
 use rgb::RGB8;
-use vec3::{lerp, Color, Point3, Vec3};
+use vec3::{lerp, Color, Point3};
 
-use crate::sphere::Sphere;
+use crate::{camera::Camera, color::color_as_rgb8, sphere::Sphere};
 
 fn random_double(min: f64, max: f64) -> f64 {
     min + (max - min) * rand::random::<f64>()
@@ -52,11 +54,13 @@ fn run(image_filename: &str) {
     let image_width: i32 = 400;
     let image_height: i32 = (image_width as f64 / aspect_ratio) as i32;
     let image_pixel_count = (image_width * image_height) as usize;
+    let samples_per_pixel = 100;
     eprintln!(
-        "Image is {width}x{height} (total {count} pixels)",
+        "Image is {width}x{height} (total {count} pixels), with {samples} samples per pixel",
         width = image_width,
         height = image_height,
-        count = image_pixel_count
+        count = image_pixel_count,
+        samples = samples_per_pixel,
     );
 
     // world
@@ -65,21 +69,7 @@ fn run(image_filename: &str) {
     world.add(Box::new(Sphere::new(Point3::new(0.0, -100.5, -1.0), 100.0)));
 
     // camera
-    let viewport_height: f64 = 2.0;
-    let viewport_width: f64 = aspect_ratio * viewport_height;
-    let focal_length: f64 = 1.0;
-    eprintln!(
-        "Viewport is {height}x{width} w/ focal length {focal}",
-        height = viewport_height,
-        width = viewport_width,
-        focal = focal_length
-    );
-
-    let origin: Point3 = Point3::default();
-    let horizontal = Vec3::new(viewport_width, 0.0, 0.0);
-    let vertical = Vec3::new(0.0, viewport_height, 0.0);
-    let lower_left_corner =
-        origin - horizontal / 2.0 - vertical / 2.0 - Vec3::new(0.0, 0.0, focal_length);
+    let cam = Camera::new(aspect_ratio);
 
     let mut image_buffer = Vec::<RGB8>::with_capacity(image_pixel_count);
     for j in (0..image_height).rev() {
@@ -87,19 +77,15 @@ fn run(image_filename: &str) {
             eprintln!("Scanlines remaining: {j}", j = j);
         }
         for i in 0..image_width {
-            let u = i as f64 / (image_width as f64 - 1.0);
-            let v = j as f64 / (image_height as f64 - 1.0);
-            let r = Ray::new(
-                origin,
-                lower_left_corner + u * horizontal + v * vertical - origin,
-            );
+            let mut pixel_color: Color = Color::zero();
+            for _ in 0..samples_per_pixel {
+                let u = (i as f64 + random_double(0.0, 1.0)) / (image_width as f64 - 1.0);
+                let v = (j as f64 + random_double(0.0, 1.0)) / (image_height as f64 - 1.0);
+                let r = cam.get_ray(u, v);
+                pixel_color += ray_color(&r, &world);
+            }
 
-            let pixel: Color = ray_color(&r, &world);
-            image_buffer.push(RGB8 {
-                r: (pixel.x * 255.9999) as u8,
-                g: (pixel.y * 255.9999) as u8,
-                b: (pixel.z * 255.9999) as u8,
-            });
+            image_buffer.push(color_as_rgb8(pixel_color, samples_per_pixel));
         }
     }
     debug_assert_eq!(image_buffer.len(), image_pixel_count);
