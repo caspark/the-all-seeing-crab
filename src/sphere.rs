@@ -1,9 +1,10 @@
 use crate::{
     hittable::{HitRecord, Hittable},
     ray::Ray,
-    vec3::Point3,
+    vec3::{Point3, Vec3},
 };
 
+#[derive(Debug, Clone, Copy)]
 pub(crate) struct Sphere {
     pub center: Point3,
     pub radius: f64,
@@ -32,10 +33,7 @@ impl Hittable for Sphere {
 
         let t = root;
         let p = r.at(t);
-        Some(HitRecord {
-            t,
-            p,
-            normal: (p - self.center) / self.radius,
-        })
+        let outward_normal: Vec3 = (p - self.center) / self.radius;
+        Some(HitRecord::new(t, r, outward_normal))
     }
 }

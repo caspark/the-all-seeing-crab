@@ -1,6 +1,6 @@
 use std::ops::{Div, DivAssign, Index, IndexMut, Mul, MulAssign};
 
-use derive_more::{Add, AddAssign, Constructor, Display, Sub, SubAssign, Sum};
+use derive_more::{Add, AddAssign, Constructor, Display, Neg, Sub, SubAssign, Sum};
 
 #[derive(
     Debug,
@@ -15,6 +15,7 @@ use derive_more::{Add, AddAssign, Constructor, Display, Sub, SubAssign, Sum};
     Sub,
     SubAssign,
     Display,
+    Neg,
 )]
 #[display(fmt = "{} {} {}", x, y, z)]
 pub(crate) struct Vec3 {
