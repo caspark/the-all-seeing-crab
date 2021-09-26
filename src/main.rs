@@ -26,6 +26,10 @@ enum RayColorMode {
     },
     #[allow(dead_code)]
     ShadeNormal,
+    #[allow(dead_code)]
+    Depth {
+        maxT: f64,
+    },
     Diffuse {
         depth: i32,
     },
@@ -42,6 +46,7 @@ fn ray_color(r: Ray, world: &HittableList, mode: RayColorMode) -> Color {
         return match mode {
             RayColorMode::Solid { color } => color,
             RayColorMode::ShadeNormal => 0.5 * (rec.normal + Color::new(1.0, 1.0, 1.0)),
+            RayColorMode::Depth { maxT } => Color::one() - rec.t / maxT * Color::one(),
             RayColorMode::Diffuse { depth } => {
                 let target: Point3 = rec.p + rec.normal + Point3::random_in_unit_sphere();
                 0.5 * ray_color(
@@ -123,7 +128,13 @@ fn run(image_filename: &str) {
                 let u = (i as f64 + util::random_double_unit()) / (image_width as f64 - 1.0);
                 let v = (j as f64 + util::random_double_unit()) / (image_height as f64 - 1.0);
                 let r = cam.get_ray(u, v);
-                pixel_color += ray_color(r, &world, RayColorMode::Diffuse { depth: max_depth });
+                pixel_color += ray_color(
+                    r,
+                    &world,
+                    // RayColorMode::ShadeNormal,
+                    // RayColorMode::Depth { maxT: 2.0 },
+                    RayColorMode::Diffuse { depth: max_depth },
+                );
             }
 
             let rgb8 = color_as_rgb8(pixel_color, samples_per_pixel);

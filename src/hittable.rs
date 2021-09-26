@@ -5,7 +5,9 @@ use crate::{
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct HitRecord {
+    /// How far along the ray the hit happened
     pub t: f64,
+    /// Point (location) that the hit occurred at
     pub p: Point3,
     pub normal: Vec3,
     pub front_face: bool,
