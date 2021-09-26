@@ -42,7 +42,7 @@ fn ray_color(r: Ray, world: &HittableList, mode: RayColorMode) -> Color {
         }
     }
 
-    if let Some(rec) = world.hit(&r, 0.0, INFINITY) {
+    if let Some(rec) = world.hit(&r, 0.001, INFINITY) {
         return match mode {
             RayColorMode::Solid { color } => color,
             RayColorMode::ShadeNormal => 0.5 * (rec.normal + Color::new(1.0, 1.0, 1.0)),
