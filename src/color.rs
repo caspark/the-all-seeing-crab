@@ -8,9 +8,9 @@ pub(crate) fn color_as_rgb8(pixel_color: Color, samples_per_pixel: i32) -> RGB8 
     let mut b = pixel_color.z;
 
     let scale = 1.0 / samples_per_pixel as f64;
-    r *= scale;
-    g *= scale;
-    b *= scale;
+    r = (scale * r).sqrt();
+    g = (scale * g).sqrt();
+    b = (scale * b).sqrt();
 
     RGB8 {
         r: (256.0f64 * r.clamp(0.0, 0.999)) as u8,
