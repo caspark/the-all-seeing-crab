@@ -2,6 +2,8 @@ use std::ops::{Div, DivAssign, Index, IndexMut, Mul, MulAssign};
 
 use derive_more::{Add, AddAssign, Constructor, Display, Neg, Sub, SubAssign, Sum};
 
+use crate::util::{random_double, random_double_unit};
+
 #[derive(
     Debug,
     Default,
@@ -39,6 +41,32 @@ impl Vec3 {
             x: 1.0,
             y: 1.0,
             z: 1.0,
+        }
+    }
+
+    pub(crate) fn random(min: f64, max: f64) -> Self {
+        Vec3 {
+            x: random_double(min, max),
+            y: random_double(min, max),
+            z: random_double(min, max),
+        }
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn random_unit() -> Self {
+        Vec3 {
+            x: random_double_unit(),
+            y: random_double_unit(),
+            z: random_double_unit(),
+        }
+    }
+
+    pub(crate) fn random_in_unit_sphere() -> Self {
+        loop {
+            let p: Point3 = Vec3::random(-1.0, 1.0);
+            if p.length_squared() < 1.0 {
+                break p;
+            }
         }
     }
 
