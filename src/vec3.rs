@@ -70,6 +70,10 @@ impl Vec3 {
         }
     }
 
+    pub(crate) fn random_unit_vector() -> Self {
+        Self::random_in_unit_sphere().to_unit()
+    }
+
     pub(crate) fn length_squared(&self) -> f64 {
         self.x * self.x + self.y * self.y + self.z * self.z
     }

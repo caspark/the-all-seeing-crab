@@ -19,40 +19,48 @@ use crate::{
     sphere::Sphere,
 };
 
+#[allow(dead_code)]
 enum RayColorMode {
-    #[allow(dead_code)]
-    Solid {
-        color: Color,
-    },
-    #[allow(dead_code)]
+    Solid { color: Color },
     ShadeNormal,
-    #[allow(dead_code)]
-    Depth {
-        maxT: f64,
-    },
-    Diffuse {
-        depth: i32,
-    },
+    Depth { max_t: f64 },
+    // bias towards normal
+    Diffuse1 { depth: i32 },
+    // almost lambertian reflection (still poor distribution)
+    Diffuse2 { depth: i32 },
 }
 
 fn ray_color(r: Ray, world: &HittableList, mode: RayColorMode) -> Color {
-    if let RayColorMode::Diffuse { depth } = mode {
-        if depth <= 0 {
-            return Color::zero();
+    let curr_depth = {
+        match mode {
+            RayColorMode::Diffuse1 { depth } => Some(depth),
+            RayColorMode::Diffuse2 { depth } => Some(depth),
+            _ => None,
         }
+    };
+    if curr_depth.map_or(false, |d| d <= 0) {
+        return Color::zero();
     }
 
     if let Some(rec) = world.hit(&r, 0.001, INFINITY) {
         return match mode {
             RayColorMode::Solid { color } => color,
             RayColorMode::ShadeNormal => 0.5 * (rec.normal + Color::new(1.0, 1.0, 1.0)),
-            RayColorMode::Depth { maxT } => Color::one() - rec.t / maxT * Color::one(),
-            RayColorMode::Diffuse { depth } => {
+            RayColorMode::Depth { max_t } => Color::one() - rec.t / max_t * Color::one(),
+            RayColorMode::Diffuse1 { depth } => {
                 let target: Point3 = rec.p + rec.normal + Point3::random_in_unit_sphere();
                 0.5 * ray_color(
                     Ray::new(rec.p, target - rec.p),
                     world,
-                    RayColorMode::Diffuse { depth: depth - 1 },
+                    RayColorMode::Diffuse1 { depth: depth - 1 },
+                )
+            }
+            RayColorMode::Diffuse2 { depth } => {
+                let target: Point3 = rec.p + rec.normal + Point3::random_unit_vector();
+                0.5 * ray_color(
+                    Ray::new(rec.p, target - rec.p),
+                    world,
+                    RayColorMode::Diffuse2 { depth: depth - 1 },
                 )
             }
         };
@@ -132,8 +140,9 @@ fn run(image_filename: &str) {
                     r,
                     &world,
                     // RayColorMode::ShadeNormal,
-                    // RayColorMode::Depth { maxT: 2.0 },
-                    RayColorMode::Diffuse { depth: max_depth },
+                    // RayColorMode::Depth { max_t: 2.0 },
+                    // RayColorMode::Diffuse1 { depth: max_depth },
+                    RayColorMode::Diffuse2 { depth: max_depth },
                 );
             }
 
