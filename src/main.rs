@@ -21,20 +21,26 @@ use crate::{
 
 #[allow(dead_code)]
 enum RayColorMode {
+    /// shade as single purely matte color
     Solid { color: Color },
+    /// shade by assuming the normal is the color
     ShadeNormal,
+    /// shade based on distance from camera
     Depth { max_t: f64 },
-    // bias towards normal
-    Diffuse1 { depth: i32 },
-    // almost lambertian reflection (still poor distribution)
-    Diffuse2 { depth: i32 },
+    /// bias of having light bounce towards the normal
+    DiffuseHack { depth: i32 },
+    /// lambertian reflection
+    DiffuseLambertian { depth: i32 },
+    /// hemispherical scattering
+    DiffuseAlternative { depth: i32 },
 }
 
 fn ray_color(r: Ray, world: &HittableList, mode: RayColorMode) -> Color {
     let curr_depth = {
         match mode {
-            RayColorMode::Diffuse1 { depth } => Some(depth),
-            RayColorMode::Diffuse2 { depth } => Some(depth),
+            RayColorMode::DiffuseHack { depth } => Some(depth),
+            RayColorMode::DiffuseLambertian { depth } => Some(depth),
+            RayColorMode::DiffuseAlternative { depth } => Some(depth),
             _ => None,
         }
     };
@@ -47,20 +53,28 @@ fn ray_color(r: Ray, world: &HittableList, mode: RayColorMode) -> Color {
             RayColorMode::Solid { color } => color,
             RayColorMode::ShadeNormal => 0.5 * (rec.normal + Color::new(1.0, 1.0, 1.0)),
             RayColorMode::Depth { max_t } => Color::one() - rec.t / max_t * Color::one(),
-            RayColorMode::Diffuse1 { depth } => {
+            RayColorMode::DiffuseHack { depth } => {
                 let target: Point3 = rec.p + rec.normal + Point3::random_in_unit_sphere();
                 0.5 * ray_color(
                     Ray::new(rec.p, target - rec.p),
                     world,
-                    RayColorMode::Diffuse1 { depth: depth - 1 },
+                    RayColorMode::DiffuseHack { depth: depth - 1 },
                 )
             }
-            RayColorMode::Diffuse2 { depth } => {
+            RayColorMode::DiffuseLambertian { depth } => {
                 let target: Point3 = rec.p + rec.normal + Point3::random_unit_vector();
                 0.5 * ray_color(
                     Ray::new(rec.p, target - rec.p),
                     world,
-                    RayColorMode::Diffuse2 { depth: depth - 1 },
+                    RayColorMode::DiffuseLambertian { depth: depth - 1 },
+                )
+            }
+            RayColorMode::DiffuseAlternative { depth } => {
+                let target: Point3 = rec.p + Point3::random_in_hemisphere(rec.normal);
+                0.5 * ray_color(
+                    Ray::new(rec.p, target - rec.p),
+                    world,
+                    RayColorMode::DiffuseLambertian { depth: depth - 1 },
                 )
             }
         };
@@ -141,8 +155,9 @@ fn run(image_filename: &str) {
                     &world,
                     // RayColorMode::ShadeNormal,
                     // RayColorMode::Depth { max_t: 2.0 },
-                    // RayColorMode::Diffuse1 { depth: max_depth },
-                    RayColorMode::Diffuse2 { depth: max_depth },
+                    // RayColorMode::DiffuseHack { depth: max_depth },
+                    // RayColorMode::DiffuseLambertian { depth: max_depth },
+                    RayColorMode::DiffuseAlternative { depth: max_depth },
                 );
             }
 
