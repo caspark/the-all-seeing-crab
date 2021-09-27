@@ -23,7 +23,7 @@ use crate::{
 };
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 enum RayColorMode {
     /// shade as single purely matte color
     BlockColor { color: Color },
@@ -104,13 +104,22 @@ fn create_world() -> HittableList {
 }
 
 fn run(image_filename: &str) {
-    // image
+    // image & rendering
     let aspect_ratio: f64 = 16.0 / 9.0;
     let image_width: i32 = 400;
     let image_height: i32 = (image_width as f64 / aspect_ratio) as i32;
     let image_pixel_count = (image_width * image_height) as usize;
     let samples_per_pixel = 100;
     let max_depth = 50;
+    let render_mode: RayColorMode = {
+        // RayColorMode::BlockColor {
+        //     color: Color::new(255.0, 0.0, 0.0),
+        // }
+        // RayColorMode::ShadeNormal
+        // RayColorMode::Depth { max_t: 1.0 }
+        RayColorMode::Material { depth: max_depth }
+    };
+
     let render_delay = std::time::Duration::from_millis(0);
     println!(
         "Image is {width}x{height} (total {count} pixels), with {samples} samples per pixel & max depth of {depth}",
@@ -140,16 +149,7 @@ fn run(image_filename: &str) {
                     let u = (i as f64 + util::random_double_unit()) / (image_width as f64 - 1.0);
                     let v = (j as f64 + util::random_double_unit()) / (image_height as f64 - 1.0);
                     let r = cam.get_ray(u, v);
-                    pixel_color += ray_color(
-                        r,
-                        world,
-                        // RayColorMode::BlockColor {
-                        //     color: Color::new(255.0, 0.0, 0.0),
-                        // },
-                        // RayColorMode::ShadeNormal,
-                        // RayColorMode::Depth { max_t: 1.0 },
-                        RayColorMode::Material { depth: max_depth },
-                    );
+                    pixel_color += ray_color(r, world, render_mode);
                 }
 
                 let rgb8 = color_as_rgb8(pixel_color, samples_per_pixel);
