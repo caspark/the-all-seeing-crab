@@ -8,7 +8,7 @@ mod util;
 mod vec3;
 
 use rayon::prelude::*;
-use std::{env, f64::INFINITY, sync::Arc};
+use std::{env, f64::INFINITY, rc::Rc};
 
 use hittable::{Hittable, HittableList};
 use ray::Ray;
@@ -83,13 +83,33 @@ fn print_usage_then_die(exe: &str, error: &str) {
     std::process::exit(1);
 }
 
+fn create_world() -> HittableList {
+    let mut hittables = HittableList::default();
+
+    let material_ground = Rc::new(DiffuseLambertian::new(Color::new(0.8, 0.8, 0.0)));
+    let material_center = Rc::new(DiffuseLambertian::new(Color::new(0.7, 0.3, 0.3)));
+
+    hittables.add(Box::new(Sphere::new(
+        Point3::new(0.0, -100.5, -1.0),
+        100.0,
+        material_ground,
+    )));
+    hittables.add(Box::new(Sphere::new(
+        Point3::new(0.0, 0.0, -1.0),
+        0.5,
+        material_center,
+    )));
+
+    hittables
+}
+
 fn run(image_filename: &str) {
     // image
     let aspect_ratio: f64 = 16.0 / 9.0;
     let image_width: i32 = 400;
     let image_height: i32 = (image_width as f64 / aspect_ratio) as i32;
     let image_pixel_count = (image_width * image_height) as usize;
-    let samples_per_pixel = 300;
+    let samples_per_pixel = 100;
     let max_depth = 50;
     eprintln!(
         "Image is {width}x{height} (total {count} pixels), with {samples} samples per pixel & max depth of {depth}",
@@ -100,37 +120,10 @@ fn run(image_filename: &str) {
         depth = max_depth,
     );
 
-    // world
-    let mut world = HittableList::default();
-
-    let material_ground = Arc::new(DiffuseLambertian::new(Color::new(0.8, 0.8, 0.0)));
-    let material_center = Arc::new(DiffuseLambertian::new(Color::new(0.7, 0.3, 0.3)));
-
-    world.add(Box::new(Sphere::new(
-        Point3::new(0.0, -100.5, -1.0),
-        100.0,
-        material_ground,
-    )));
-    world.add(Box::new(Sphere::new(
-        Point3::new(0.0, 0.0, -1.0),
-        0.5,
-        material_center,
-    )));
-
     // camera
     let cam = Camera::new(aspect_ratio);
 
-    let (width_incr, height_incr) = {
-        let indicator_width = 100 as i32;
-        let indicator_height = (indicator_width as f64 / aspect_ratio / 2.0) as i32;
-        (
-            (image_width / indicator_width),
-            (image_height / indicator_height),
-        )
-    };
-
     eprintln!("Rendering:");
-
     type RenderLine = (i32, Vec<RGB8>);
     let (tx, rx) = flume::unbounded::<RenderLine>();
 
@@ -138,9 +131,7 @@ fn run(image_filename: &str) {
         .rev()
         .collect::<Vec<_>>()
         .into_par_iter()
-        .for_each(|j| {
-            // let showing_progress_for_this_line = j % height_incr == 0;
-
+        .for_each_init(create_world, |world, j| {
             let mut line_pixels = Vec::with_capacity(image_width as usize);
             for i in 0..image_width {
                 let mut pixel_color: Color = Color::zero();
@@ -150,7 +141,7 @@ fn run(image_filename: &str) {
                     let r = cam.get_ray(u, v);
                     pixel_color += ray_color(
                         r,
-                        &world,
+                        world,
                         // RayColorMode::BlockColor {
                         //     color: Color::new(255.0, 0.0, 0.0),
                         // },
@@ -162,18 +153,19 @@ fn run(image_filename: &str) {
 
                 let rgb8 = color_as_rgb8(pixel_color, samples_per_pixel);
                 line_pixels.push(rgb8);
-
-                // if showing_progress_for_this_line && i % width_incr == 0 {
-                //     eprint!("{}", rgb8_as_terminal_char(rgb8));
-                // }
             }
 
             tx.send((j, line_pixels)).unwrap();
-
-            // if showing_progress_for_this_line {
-            //     eprintln!("");
-            // }
         });
+
+    let (width_incr, height_incr) = {
+        let indicator_width = 100 as i32;
+        let indicator_height = (indicator_width as f64 / aspect_ratio / 2.0) as i32;
+        (
+            (image_width / indicator_width),
+            (image_height / indicator_height),
+        )
+    };
 
     let mut image_buffer = vec![RGB8 { r: 0, g: 0, b: 0 }; image_pixel_count];
     for _ in 0..image_height {
@@ -183,6 +175,23 @@ fn run(image_filename: &str) {
         let offset_start = (image_height - line_num - 1) as usize * image_width as usize;
         let offset_end = offset_start + image_width as usize;
         image_buffer[offset_start..offset_end].copy_from_slice(pixels.as_slice());
+
+        // we only want to update the terminal render-in-progress display if the line we just got
+        // is actually going to change what we can see
+        if line_num % height_incr == 0 {
+            for j in 0..(image_height as usize) {
+                let showing_progress_for_this_line = j % height_incr as usize == 0;
+                for i in 0..(image_width as usize) {
+                    if showing_progress_for_this_line && i % width_incr as usize == 0 {
+                        let c = rgb8_as_terminal_char(image_buffer[j * image_width as usize + i]);
+                        eprint!("{}", c,);
+                    }
+                }
+                if showing_progress_for_this_line {
+                    eprintln!();
+                }
+            }
+        }
     }
 
     assert_eq!(image_buffer.len(), image_pixel_count);

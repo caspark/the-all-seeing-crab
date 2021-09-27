@@ -1,4 +1,4 @@
-use std::{rc::Rc, sync::Arc};
+use std::rc::Rc;
 
 use crate::{
     hittable::{HitRecord, Hittable},
@@ -13,7 +13,7 @@ use derive_more::Constructor;
 pub(crate) struct Sphere {
     pub center: Point3,
     pub radius: f64,
-    pub material: Arc<dyn Material>,
+    pub material: Rc<dyn Material>,
 }
 
 impl Hittable for Sphere {
