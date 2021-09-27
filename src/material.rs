@@ -66,3 +66,21 @@ impl Material for DiffuseHemispherical {
         Some((self.albedo, Ray::new(rec.p, scatter_direction)))
     }
 }
+
+/// Reflective metal
+#[derive(Debug, Clone, Copy, Constructor)]
+pub(crate) struct Metal {
+    albedo: Color,
+}
+
+impl Material for Metal {
+    fn scatter(&self, _r_in: Ray, rec: &HitRecord) -> Option<(Color, Ray)> {
+        let reflected = Vec3::reflect(_r_in.direction().to_unit(), rec.normal);
+        let scattered = Ray::new(rec.p, reflected);
+        if scattered.direction().dot(rec.normal) > 0.0 {
+            Some((self.albedo, scattered))
+        } else {
+            None
+        }
+    }
+}

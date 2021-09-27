@@ -7,6 +7,7 @@ mod sphere;
 mod util;
 mod vec3;
 
+use material::Metal;
 use rayon::prelude::*;
 use std::{env, f64::INFINITY, rc::Rc};
 
@@ -88,6 +89,8 @@ fn create_world() -> HittableList {
 
     let material_ground = Rc::new(DiffuseLambertian::new(Color::new(0.8, 0.8, 0.0)));
     let material_center = Rc::new(DiffuseLambertian::new(Color::new(0.7, 0.3, 0.3)));
+    let material_left = Rc::new(Metal::new(Color::new(0.8, 0.8, 0.8)));
+    let material_right = Rc::new(Metal::new(Color::new(0.8, 0.6, 0.2)));
 
     hittables.add(Box::new(Sphere::new(
         Point3::new(0.0, -100.5, -1.0),
@@ -98,6 +101,16 @@ fn create_world() -> HittableList {
         Point3::new(0.0, 0.0, -1.0),
         0.5,
         material_center,
+    )));
+    hittables.add(Box::new(Sphere::new(
+        Point3::new(-1.0, 0.0, -1.0),
+        0.5,
+        material_left,
+    )));
+    hittables.add(Box::new(Sphere::new(
+        Point3::new(1.0, 0.0, -1.0),
+        0.5,
+        material_right,
     )));
 
     hittables
