@@ -1,12 +1,13 @@
 mod camera;
 mod color;
 mod hittable;
+mod material;
 mod ray;
 mod sphere;
 mod util;
 mod vec3;
 
-use std::{env, f64::INFINITY};
+use std::{env, f64::INFINITY, rc::Rc};
 
 use hittable::{Hittable, HittableList};
 use ray::Ray;
@@ -16,6 +17,7 @@ use vec3::{lerp, Color, Point3};
 use crate::{
     camera::Camera,
     color::{color_as_rgb8, rgb8_as_terminal_char},
+    material::Lambertian,
     sphere::Sphere,
 };
 
@@ -46,6 +48,19 @@ fn ray_color(r: Ray, world: &HittableList, mode: RayColorMode) -> Color {
     };
     if curr_depth.map_or(false, |d| d <= 0) {
         return Color::zero();
+    }
+
+    if let Some(rec) = world.hit(&r, 0.001, INFINITY) {
+        if let Some((ref attenuation, ref scattered)) = rec.mat_ptr.clone().scatter(r, rec) {
+            return (*attenuation)
+                * ray_color(
+                    *scattered,
+                    world,
+                    RayColorMode::DiffuseLambertian {
+                        depth: curr_depth.unwrap() - 1,
+                    },
+                );
+        }
     }
 
     if let Some(rec) = world.hit(&r, 0.001, INFINITY) {
@@ -124,8 +139,20 @@ fn run(image_filename: &str) {
 
     // world
     let mut world = HittableList::default();
-    world.add(Box::new(Sphere::new(Point3::new(0.0, 0.0, -1.0), 0.5)));
-    world.add(Box::new(Sphere::new(Point3::new(0.0, -100.5, -1.0), 100.0)));
+
+    let material_ground = Rc::new(Lambertian::new(Color::new(0.8, 0.8, 0.0)));
+    let material_center = Rc::new(Lambertian::new(Color::new(0.7, 0.3, 0.3)));
+
+    world.add(Box::new(Sphere::new(
+        Point3::new(0.0, -100.5, -1.0),
+        100.0,
+        material_ground,
+    )));
+    world.add(Box::new(Sphere::new(
+        Point3::new(0.0, 0.0, -1.0),
+        0.5,
+        material_center,
+    )));
 
     // camera
     let cam = Camera::new(aspect_ratio);
