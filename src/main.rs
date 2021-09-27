@@ -132,7 +132,7 @@ fn run(image_filename: &str) {
         // RayColorMode::Depth { max_t: 1.0 }
         RayColorMode::Material { depth: max_depth }
     };
-
+    let render_threads = 16;
     let render_delay = std::time::Duration::from_millis(0);
     println!(
         "Image is {width}x{height} (total {count} pixels), with {samples} samples per pixel & max depth of {depth}",
@@ -146,94 +146,109 @@ fn run(image_filename: &str) {
     // camera
     let cam = Camera::new(aspect_ratio);
 
-    println!("Rendering...");
     type RenderLine = (i32, Vec<RGB8>);
     let (tx, rx) = flume::unbounded::<RenderLine>();
 
-    (0..image_height)
-        .rev()
-        .collect::<Vec<_>>()
-        .into_par_iter()
-        .for_each_init(create_world, |world, j| {
-            let mut line_pixels = Vec::with_capacity(image_width as usize);
-            for i in 0..image_width {
-                let mut pixel_color: Color = Color::zero();
-                for _ in 0..samples_per_pixel {
-                    let u = (i as f64 + util::random_double_unit()) / (image_width as f64 - 1.0);
-                    let v = (j as f64 + util::random_double_unit()) / (image_height as f64 - 1.0);
-                    let r = cam.get_ray(u, v);
-                    pixel_color += ray_color(r, world, render_mode);
+    let render_image_fn = || {
+        println!("Rendering w/ {} threads...", render_threads);
+
+        (0..image_height)
+            .rev()
+            .collect::<Vec<_>>()
+            .into_par_iter()
+            .for_each_init(create_world, |world, j| {
+                let mut line_pixels = Vec::with_capacity(image_width as usize);
+                for i in 0..image_width {
+                    let mut pixel_color: Color = Color::zero();
+                    for _ in 0..samples_per_pixel {
+                        let u =
+                            (i as f64 + util::random_double_unit()) / (image_width as f64 - 1.0);
+                        let v =
+                            (j as f64 + util::random_double_unit()) / (image_height as f64 - 1.0);
+                        let r = cam.get_ray(u, v);
+                        pixel_color += ray_color(r, world, render_mode);
+                    }
+
+                    let rgb8 = color_as_rgb8(pixel_color, samples_per_pixel);
+                    line_pixels.push(rgb8);
                 }
 
-                let rgb8 = color_as_rgb8(pixel_color, samples_per_pixel);
-                line_pixels.push(rgb8);
-            }
+                tx.send((j, line_pixels)).unwrap();
+            });
+    };
 
-            tx.send((j, line_pixels)).unwrap();
-        });
+    let output_image_fn = || {
+        let mut image_buffer = vec![RGB8 { r: 0, g: 0, b: 0 }; image_pixel_count];
+        {
+            let progress_indicator_width = 100 as i32;
+            let progress_indicator_height =
+                (progress_indicator_width as f64 / aspect_ratio / 2.0) as i32;
+            let width_incr = image_width / progress_indicator_width;
+            let height_incr = image_height / progress_indicator_height;
 
-    let mut image_buffer = vec![RGB8 { r: 0, g: 0, b: 0 }; image_pixel_count];
-    {
-        let progress_indicator_width = 100 as i32;
-        let progress_indicator_height =
-            (progress_indicator_width as f64 / aspect_ratio / 2.0) as i32;
-        let width_incr = image_width / progress_indicator_width;
-        let height_incr = image_height / progress_indicator_height;
+            let mut progress_lines_written = 0;
 
-        let mut progress_lines_written = 0;
+            for _ in 0..image_height {
+                let (line_num, pixels) = rx.recv().unwrap();
+                let line_num = image_height - line_num - 1;
+                assert_eq!(pixels.len(), image_width as usize);
 
-        for _ in 0..image_height {
-            let (line_num, pixels) = rx.recv().unwrap();
-            let line_num = image_height - line_num - 1;
-            assert_eq!(pixels.len(), image_width as usize);
+                let offset_start = line_num as usize * image_width as usize;
+                let offset_end = offset_start + image_width as usize;
+                image_buffer[offset_start..offset_end].copy_from_slice(pixels.as_slice());
 
-            let offset_start = line_num as usize * image_width as usize;
-            let offset_end = offset_start + image_width as usize;
-            image_buffer[offset_start..offset_end].copy_from_slice(pixels.as_slice());
-
-            // we only want to update the terminal render-in-progress display if the line we just
-            // received is actually going to change the display
-            if line_num % height_incr == 0 {
-                if progress_lines_written > 0 {
-                    print!("{}", termion::cursor::Up(progress_lines_written));
-                    progress_lines_written = 0;
-                }
-                for j in 0..(image_height as usize) {
-                    let showing_progress_for_this_line = j % height_incr as usize == 0;
-                    for i in 0..(image_width as usize) {
-                        if showing_progress_for_this_line && i % width_incr as usize == 0 {
-                            let c =
-                                rgb8_as_terminal_char(image_buffer[j * image_width as usize + i]);
-                            print!("{}", c);
+                // we only want to update the terminal render-in-progress display if the line we just
+                // received is actually going to change the display
+                if line_num % height_incr == 0 {
+                    if progress_lines_written > 0 {
+                        print!("{}", termion::cursor::Up(progress_lines_written));
+                        progress_lines_written = 0;
+                    }
+                    for j in 0..(image_height as usize) {
+                        let showing_progress_for_this_line = j % height_incr as usize == 0;
+                        for i in 0..(image_width as usize) {
+                            if showing_progress_for_this_line && i % width_incr as usize == 0 {
+                                let c = rgb8_as_terminal_char(
+                                    image_buffer[j * image_width as usize + i],
+                                );
+                                print!("{}", c);
+                            }
+                        }
+                        if showing_progress_for_this_line {
+                            println!();
+                            progress_lines_written += 1;
                         }
                     }
-                    if showing_progress_for_this_line {
-                        println!();
-                        progress_lines_written += 1;
+
+                    if render_delay.as_millis() > 0 {
+                        std::thread::sleep(render_delay);
                     }
                 }
-
-                if render_delay.as_millis() > 0 {
-                    std::thread::sleep(render_delay);
-                }
             }
+            assert_eq!(image_buffer.len(), image_pixel_count);
         }
-        assert_eq!(image_buffer.len(), image_pixel_count);
-    }
 
-    println!(
-        "Saving resulting image to disk at {} in PNG format...",
-        image_filename
-    );
-    lodepng::encode_file(
-        image_filename,
-        &image_buffer,
-        image_width as usize,
-        image_height as usize,
-        lodepng::ColorType::RGB,
-        8,
-    )
-    .expect("Encoding result and saving to disk failed");
+        println!(
+            "Saving resulting image to disk at {} in PNG format...",
+            image_filename
+        );
+        lodepng::encode_file(
+            image_filename,
+            &image_buffer,
+            image_width as usize,
+            image_height as usize,
+            lodepng::ColorType::RGB,
+            8,
+        )
+        .expect("Encoding result and saving to disk failed");
 
-    println!("Done saving.");
+        println!("Done saving.");
+    };
+
+    let threadpool = rayon::ThreadPoolBuilder::new()
+        // thread count has 1 added for the thread used to collect & display the results
+        .num_threads(render_threads + 1)
+        .build()
+        .unwrap();
+    threadpool.join(render_image_fn, output_image_fn);
 }
