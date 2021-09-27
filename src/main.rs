@@ -120,7 +120,7 @@ fn run(image_filename: &str) {
     let cam = Camera::new(aspect_ratio);
 
     let (width_incr, height_incr) = {
-        let indicator_width = 100.0 as i32;
+        let indicator_width = 100 as i32;
         let indicator_height = (indicator_width as f64 / aspect_ratio / 2.0) as i32;
         (
             (image_width / indicator_width),
