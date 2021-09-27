@@ -5,7 +5,7 @@ use crate::{
 };
 use derive_more::Constructor;
 
-pub(crate) trait Material: std::fmt::Debug {
+pub(crate) trait Material: std::fmt::Debug + Sync + Send {
     /// Returns the scattered ray
     fn scatter(&self, r_in: Ray, rec: &HitRecord) -> Option<(Color, Ray)>;
 }
