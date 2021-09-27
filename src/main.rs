@@ -17,80 +17,42 @@ use vec3::{lerp, Color, Point3};
 use crate::{
     camera::Camera,
     color::{color_as_rgb8, rgb8_as_terminal_char},
-    material::Lambertian,
+    material::DiffuseLambertian,
     sphere::Sphere,
 };
 
 #[allow(dead_code)]
+#[derive(Debug)]
 enum RayColorMode {
     /// shade as single purely matte color
-    Solid { color: Color },
+    BlockColor { color: Color },
     /// shade by assuming the normal is the color
     ShadeNormal,
     /// shade based on distance from camera
     Depth { max_t: f64 },
-    /// bias of having light bounce towards the normal
-    DiffuseHack { depth: i32 },
-    /// lambertian reflection
-    DiffuseLambertian { depth: i32 },
-    /// hemispherical scattering
-    DiffuseAlternative { depth: i32 },
+    /// use the assigned materials of each hittable object
+    Material { depth: i32 },
 }
 
 fn ray_color(r: Ray, world: &HittableList, mode: RayColorMode) -> Color {
-    let curr_depth = {
-        match mode {
-            RayColorMode::DiffuseHack { depth } => Some(depth),
-            RayColorMode::DiffuseLambertian { depth } => Some(depth),
-            RayColorMode::DiffuseAlternative { depth } => Some(depth),
-            _ => None,
-        }
-    };
-    if curr_depth.map_or(false, |d| d <= 0) {
-        return Color::zero();
-    }
-
-    if let Some(rec) = world.hit(&r, 0.001, INFINITY) {
-        if let Some((ref attenuation, ref scattered)) = rec.mat_ptr.clone().scatter(r, rec) {
-            return (*attenuation)
-                * ray_color(
-                    *scattered,
-                    world,
-                    RayColorMode::DiffuseLambertian {
-                        depth: curr_depth.unwrap() - 1,
-                    },
-                );
+    if let RayColorMode::Material { depth } = mode {
+        if depth <= 0 {
+            return Color::zero();
         }
     }
 
     if let Some(rec) = world.hit(&r, 0.001, INFINITY) {
         return match mode {
-            RayColorMode::Solid { color } => color,
+            RayColorMode::BlockColor { color } => color,
             RayColorMode::ShadeNormal => 0.5 * (rec.normal + Color::new(1.0, 1.0, 1.0)),
             RayColorMode::Depth { max_t } => Color::one() - rec.t / max_t * Color::one(),
-            RayColorMode::DiffuseHack { depth } => {
-                let target: Point3 = rec.p + rec.normal + Point3::random_in_unit_sphere();
-                0.5 * ray_color(
-                    Ray::new(rec.p, target - rec.p),
-                    world,
-                    RayColorMode::DiffuseHack { depth: depth - 1 },
-                )
-            }
-            RayColorMode::DiffuseLambertian { depth } => {
-                let target: Point3 = rec.p + rec.normal + Point3::random_unit_vector();
-                0.5 * ray_color(
-                    Ray::new(rec.p, target - rec.p),
-                    world,
-                    RayColorMode::DiffuseLambertian { depth: depth - 1 },
-                )
-            }
-            RayColorMode::DiffuseAlternative { depth } => {
-                let target: Point3 = rec.p + Point3::random_in_hemisphere(rec.normal);
-                0.5 * ray_color(
-                    Ray::new(rec.p, target - rec.p),
-                    world,
-                    RayColorMode::DiffuseLambertian { depth: depth - 1 },
-                )
+            RayColorMode::Material { depth } => {
+                if let Some((attenuation, scattered)) = rec.mat_ptr.scatter(r, &rec) {
+                    let new_depth = RayColorMode::Material { depth: depth - 1 };
+                    return attenuation * ray_color(scattered, world, new_depth);
+                } else {
+                    return Color::zero();
+                }
             }
         };
     }
@@ -140,8 +102,8 @@ fn run(image_filename: &str) {
     // world
     let mut world = HittableList::default();
 
-    let material_ground = Rc::new(Lambertian::new(Color::new(0.8, 0.8, 0.0)));
-    let material_center = Rc::new(Lambertian::new(Color::new(0.7, 0.3, 0.3)));
+    let material_ground = Rc::new(DiffuseLambertian::new(Color::new(0.8, 0.8, 0.0)));
+    let material_center = Rc::new(DiffuseLambertian::new(Color::new(0.7, 0.3, 0.3)));
 
     world.add(Box::new(Sphere::new(
         Point3::new(0.0, -100.5, -1.0),
@@ -180,11 +142,12 @@ fn run(image_filename: &str) {
                 pixel_color += ray_color(
                     r,
                     &world,
+                    // RayColorMode::BlockColor {
+                    //     color: Color::new(255.0, 0.0, 0.0),
+                    // },
                     // RayColorMode::ShadeNormal,
                     // RayColorMode::Depth { max_t: 2.0 },
-                    // RayColorMode::DiffuseHack { depth: max_depth },
-                    // RayColorMode::DiffuseLambertian { depth: max_depth },
-                    RayColorMode::DiffuseAlternative { depth: max_depth },
+                    RayColorMode::Material { depth: max_depth },
                 );
             }
 
