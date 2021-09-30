@@ -18,7 +18,7 @@ pub(crate) struct HitRecord {
 }
 
 impl HitRecord {
-    pub(crate) fn new<'m>(
+    pub(crate) fn new(
         t: f64,
         r: &Ray,
         outward_normal: Vec3,

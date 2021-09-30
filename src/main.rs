@@ -180,7 +180,7 @@ fn run(image_filename: &str) {
     let output_image_fn = || {
         let mut image_buffer = vec![RGB8 { r: 0, g: 0, b: 0 }; image_pixel_count];
         {
-            let progress_indicator_width = 100 as i32;
+            let progress_indicator_width = 100i32;
             let progress_indicator_height =
                 (progress_indicator_width as f64 / aspect_ratio / 2.0) as i32;
             let width_incr = image_width / progress_indicator_width;
