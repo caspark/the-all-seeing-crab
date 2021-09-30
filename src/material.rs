@@ -75,8 +75,8 @@ pub(crate) struct Metal {
 }
 
 impl Metal {
-    pub(crate) fn new(albedo: Color, fuzz: f64) -> Metal {
-        Metal {
+    pub(crate) fn new(albedo: Color, fuzz: f64) -> Self {
+        Self {
             albedo,
             fuzz: if fuzz < 1.0 { fuzz } else { 1.0 },
         }
@@ -92,5 +92,35 @@ impl Material for Metal {
         } else {
             None
         }
+    }
+}
+
+/// Dielectric metals (glass, water, etc)
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Dielectric {
+    /// Index of refraction
+    ir: f64,
+}
+
+impl Dielectric {
+    pub(crate) fn new(ir: f64) -> Self {
+        Self { ir }
+    }
+}
+
+impl Material for Dielectric {
+    fn scatter(&self, r_in: Ray, rec: &HitRecord) -> Option<(Color, Ray)> {
+        let attenuation = Color::new(1.0, 1.0, 1.0);
+        let refraction_ratio = if rec.front_face {
+            1.0 / self.ir
+        } else {
+            self.ir
+        };
+
+        let unit_direction = r_in.direction().to_unit();
+        let refracted = Vec3::refract(unit_direction, rec.normal, refraction_ratio);
+
+        let scattered = Ray::new(rec.p, refracted);
+        Some((attenuation, scattered))
     }
 }
