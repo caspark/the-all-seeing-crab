@@ -105,6 +105,11 @@ fn create_world() -> HittableList {
     hittables.add(Box::new(Sphere::new(
         Point3::new(-1.0, 0.0, -1.0),
         0.5,
+        material_left.clone(),
+    )));
+    hittables.add(Box::new(Sphere::new(
+        Point3::new(-1.0, 0.0, -1.0),
+        -0.4,
         material_left,
     )));
     hittables.add(Box::new(Sphere::new(
