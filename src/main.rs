@@ -149,7 +149,7 @@ fn run(image_filename: &str) {
     );
 
     // camera
-    let cam = Camera::new(aspect_ratio);
+    let cam = Camera::new(90.0, aspect_ratio);
 
     type RenderLine = (i32, Vec<RGB8>);
     let (tx, rx) = flume::unbounded::<RenderLine>();
