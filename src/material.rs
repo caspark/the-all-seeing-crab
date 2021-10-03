@@ -1,6 +1,7 @@
 use crate::{
     hittable::HitRecord,
     ray::Ray,
+    util::random_double,
     vec3::{Color, Vec3},
 };
 use derive_more::Constructor;
@@ -108,6 +109,15 @@ impl Dielectric {
     }
 }
 
+impl Dielectric {
+    fn reflectance(cosine: f64, ref_idx: f64) -> f64 {
+        // use schlick's approximation for reflectance
+        let r0 = (1.0 - ref_idx) / (1.0 + ref_idx);
+        let r0 = r0 * r0;
+        r0 + (1.0 - r0) * (1.0 - cosine).powi(5)
+    }
+}
+
 impl Material for Dielectric {
     fn scatter(&self, r_in: Ray, rec: &HitRecord) -> Option<(Color, Ray)> {
         let attenuation = Color::new(1.0, 1.0, 1.0);
@@ -123,7 +133,9 @@ impl Material for Dielectric {
 
         let cannot_refract = refraction_ratio * sin_theta > 1.0;
 
-        let direction = if cannot_refract {
+        let direction = if cannot_refract
+            || Dielectric::reflectance(cos_theta, refraction_ratio) > random_double(0.0, 1.0)
+        {
             Vec3::reflect(unit_direction, rec.normal)
         } else {
             Vec3::refract(unit_direction, rec.normal, refraction_ratio)
