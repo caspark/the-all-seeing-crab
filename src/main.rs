@@ -196,7 +196,7 @@ fn create_random_scene() -> HittableList {
 
 fn run(image_filename: &str) {
     // scene
-    let generate_random_scene = false;
+    let generate_random_scene = true;
 
     // image & rendering
     let aspect_ratio: f64 = if generate_random_scene {
