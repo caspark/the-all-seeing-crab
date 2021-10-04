@@ -7,9 +7,10 @@ mod sphere;
 mod util;
 mod vec3;
 
-use material::{Dielectric, Metal};
+use material::{Dielectric, Material, Metal};
 use rayon::prelude::*;
 use std::{env, f64::INFINITY, rc::Rc};
+use util::random_double;
 
 use hittable::{Hittable, HittableList};
 use ray::Ray;
@@ -85,47 +86,112 @@ fn print_usage_then_die(exe: &str, error: &str) {
     std::process::exit(1);
 }
 
-fn create_world() -> HittableList {
-    let mut hittables = HittableList::default();
+fn create_fixed_scene() -> HittableList {
+    let mut world = HittableList::default();
 
     let material_ground = Rc::new(DiffuseLambertian::new(Color::new(0.8, 0.8, 0.0)));
     let material_center = Rc::new(DiffuseLambertian::new(Color::new(0.1, 0.2, 0.5)));
     let material_left = Rc::new(Dielectric::new(1.5));
     let material_right = Rc::new(Metal::new(Color::new(0.8, 0.6, 0.2), 0.0));
 
-    hittables.add(Box::new(Sphere::new(
+    world.add(Box::new(Sphere::new(
         Point3::new(0.0, -100.5, -1.0),
         100.0,
         material_ground,
     )));
-    hittables.add(Box::new(Sphere::new(
+    world.add(Box::new(Sphere::new(
         Point3::new(0.0, 0.0, -1.0),
         0.5,
         material_center,
     )));
-    hittables.add(Box::new(Sphere::new(
+    world.add(Box::new(Sphere::new(
         Point3::new(-1.0, 0.0, -1.0),
         0.5,
         material_left.clone(),
     )));
-    hittables.add(Box::new(Sphere::new(
+    world.add(Box::new(Sphere::new(
         Point3::new(-1.0, 0.0, -1.0),
         -0.45,
         material_left,
     )));
-    hittables.add(Box::new(Sphere::new(
+    world.add(Box::new(Sphere::new(
         Point3::new(1.0, 0.0, -1.0),
         0.5,
         material_right,
     )));
 
-    hittables
+    world
+}
+
+fn create_random_scene() -> HittableList {
+    let mut world = HittableList::default();
+
+    let material_ground = Rc::new(DiffuseLambertian::new(Color::new(0.8, 0.8, 0.0)));
+    world.add(Box::new(Sphere::new(
+        Point3::new(0.0, -1000.0, 0.0),
+        1000.0,
+        material_ground,
+    )));
+
+    for a in -11..11 {
+        for b in -11..11 {
+            let a = a as f64;
+            let b = b as f64;
+
+            let choose_mat = random_double(0.0, 1.0);
+            let center = Point3::new(
+                a + 0.9 * random_double(0.0, 1.0),
+                0.2,
+                b + 0.9 * random_double(0.0, 1.0),
+            );
+
+            if (center - Point3::new(4.0, 0.2, 0.0)).length() > 0.9 {
+                let material: Rc<dyn Material> = if choose_mat < 0.8 {
+                    let albedo = Color::random(0.0, 1.0) * Color::random(0.0, 1.0);
+                    Rc::new(DiffuseLambertian::new(albedo))
+                } else if choose_mat < 0.95 {
+                    let albedo = Color::random(0.5, 1.0);
+                    let fuzz = random_double(0.0, 0.5);
+                    Rc::new(Metal::new(albedo, fuzz))
+                } else {
+                    Rc::new(Dielectric::new(1.5)) // 1.5 is glass
+                };
+                world.add(Box::new(Sphere::new(center, 0.2, material)));
+            }
+        }
+    }
+
+    world.add(Box::new(Sphere::new(
+        Point3::new(0.0, 1.0, 0.0),
+        0.5,
+        Rc::new(Dielectric::new(1.5)),
+    )));
+
+    world.add(Box::new(Sphere::new(
+        Point3::new(-4.0, 1.0, 0.0),
+        0.5,
+        Rc::new(DiffuseLambertian::new(Color::new(0.1, 0.2, 0.5))),
+    )));
+    world.add(Box::new(Sphere::new(
+        Point3::new(4.0, 1.0, 0.0),
+        0.5,
+        Rc::new(Metal::new(Color::new(0.8, 0.6, 0.2), 0.0)),
+    )));
+
+    world
 }
 
 fn run(image_filename: &str) {
+    // scene
+    let generate_random_scene = true;
+
     // image & rendering
-    let aspect_ratio: f64 = 16.0 / 9.0;
-    let image_width: i32 = 800;
+    let aspect_ratio: f64 = if generate_random_scene {
+        3.0 / 2.0
+    } else {
+        16.0 / 9.0
+    };
+    let image_width: i32 = 400;
     let image_height: i32 = (image_width as f64 / aspect_ratio) as i32;
     let image_pixel_count = (image_width * image_height) as usize;
     let samples_per_pixel = 100;
@@ -140,6 +206,7 @@ fn run(image_filename: &str) {
     };
     let render_threads = 16;
     let render_delay = std::time::Duration::from_millis(0);
+    let incremental_progress_display = true;
     println!(
         "Image is {width}x{height} (total {count} pixels), with {samples} samples per pixel & max depth of {depth}",
         width = image_width,
@@ -151,12 +218,18 @@ fn run(image_filename: &str) {
 
     // camera
     let cam = {
-        let look_from = Point3::new(3.0, 3.0, 2.0);
-        let look_at = Point3::new(0.0, 0.0, -1.0);
+        let (look_from, look_at) = if generate_random_scene {
+            (Point3::new(13.0, 2.0, 3.0), Point3::new(0.0, 0.0, 0.0))
+        } else {
+            (Point3::new(3.0, 3.0, 2.0), Point3::new(0.0, 0.0, -1.0))
+        };
         let vup = Vec3::new(0.0, 1.0, 0.0);
         let vfov = 20.0;
-        let focus_dist = (look_from - look_at).length();
-        let aperture = 1.0;
+        let (focus_dist, aperture) = if generate_random_scene {
+            (10.0, 0.1)
+        } else {
+            ((look_from - look_at).length(), 1.0)
+        };
         Camera::new(
             look_from,
             look_at,
@@ -178,25 +251,34 @@ fn run(image_filename: &str) {
             .rev()
             .collect::<Vec<_>>()
             .into_par_iter()
-            .for_each_init(create_world, |world, j| {
-                let mut line_pixels = Vec::with_capacity(image_width as usize);
-                for i in 0..image_width {
-                    let mut pixel_color: Color = Color::zero();
-                    for _ in 0..samples_per_pixel {
-                        let u =
-                            (i as f64 + util::random_double_unit()) / (image_width as f64 - 1.0);
-                        let v =
-                            (j as f64 + util::random_double_unit()) / (image_height as f64 - 1.0);
-                        let r = cam.get_ray(u, v);
-                        pixel_color += ray_color(r, world, render_mode);
+            .for_each_init(
+                || {
+                    if generate_random_scene {
+                        create_random_scene()
+                    } else {
+                        create_fixed_scene()
+                    }
+                },
+                |world, j| {
+                    let mut line_pixels = Vec::with_capacity(image_width as usize);
+                    for i in 0..image_width {
+                        let mut pixel_color: Color = Color::zero();
+                        for _ in 0..samples_per_pixel {
+                            let u = (i as f64 + util::random_double_unit())
+                                / (image_width as f64 - 1.0);
+                            let v = (j as f64 + util::random_double_unit())
+                                / (image_height as f64 - 1.0);
+                            let r = cam.get_ray(u, v);
+                            pixel_color += ray_color(r, world, render_mode);
+                        }
+
+                        let rgb8 = color_as_rgb8(pixel_color, samples_per_pixel);
+                        line_pixels.push(rgb8);
                     }
 
-                    let rgb8 = color_as_rgb8(pixel_color, samples_per_pixel);
-                    line_pixels.push(rgb8);
-                }
-
-                tx.send((j, line_pixels)).unwrap();
-            });
+                    tx.send((j, line_pixels)).unwrap();
+                },
+            );
     };
 
     let output_image_fn = || {
@@ -221,7 +303,7 @@ fn run(image_filename: &str) {
 
                 // we only want to update the terminal render-in-progress display if the line we just
                 // received is actually going to change the display
-                if line_num % height_incr == 0 {
+                if incremental_progress_display && line_num % height_incr == 0 {
                     if progress_lines_written > 0 {
                         print!("{}", termion::cursor::Up(progress_lines_written));
                         progress_lines_written = 0;
