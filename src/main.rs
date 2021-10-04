@@ -7,9 +7,9 @@ mod sphere;
 mod util;
 mod vec3;
 
-use material::{Dielectric, Material, Metal};
+use material::Material;
 use rayon::prelude::*;
-use std::{env, f64::INFINITY, rc::Rc};
+use std::{env, f64::INFINITY};
 use util::random_double;
 
 use hittable::{Hittable, HittableList};
@@ -20,7 +20,6 @@ use vec3::{lerp, Color, Point3};
 use crate::{
     camera::Camera,
     color::{color_as_rgb8, rgb8_as_terminal_char},
-    material::DiffuseLambertian,
     sphere::Sphere,
     vec3::Vec3,
 };
@@ -89,10 +88,17 @@ fn print_usage_then_die(exe: &str, error: &str) {
 fn create_fixed_scene() -> HittableList {
     let mut world = HittableList::default();
 
-    let material_ground = Rc::new(DiffuseLambertian::new(Color::new(0.8, 0.8, 0.0)));
-    let material_center = Rc::new(DiffuseLambertian::new(Color::new(0.1, 0.2, 0.5)));
-    let material_left = Rc::new(Dielectric::new(1.5));
-    let material_right = Rc::new(Metal::new(Color::new(0.8, 0.6, 0.2), 0.0));
+    let material_ground = Material::DiffuseLambertian {
+        albedo: Color::new(0.8, 0.8, 0.0),
+    };
+    let material_center = Material::DiffuseLambertian {
+        albedo: Color::new(0.1, 0.2, 0.5),
+    };
+    let material_left = Material::Dielectric { ir: 1.5 };
+    let material_right = Material::Metal {
+        albedo: Color::new(0.8, 0.6, 0.2),
+        fuzz: 0.0,
+    };
 
     world.add(Box::new(Sphere::new(
         Point3::new(0.0, -100.5, -1.0),
@@ -126,7 +132,9 @@ fn create_fixed_scene() -> HittableList {
 fn create_random_scene() -> HittableList {
     let mut world = HittableList::default();
 
-    let material_ground = Rc::new(DiffuseLambertian::new(Color::new(0.8, 0.8, 0.0)));
+    let material_ground = Material::DiffuseLambertian {
+        albedo: Color::new(0.8, 0.8, 0.0),
+    };
     world.add(Box::new(Sphere::new(
         Point3::new(0.0, -1000.0, 0.0),
         1000.0,
@@ -146,15 +154,15 @@ fn create_random_scene() -> HittableList {
             );
 
             if (center - Point3::new(4.0, 0.2, 0.0)).length() > 0.9 {
-                let material: Rc<dyn Material> = if choose_mat < 0.8 {
+                let material = if choose_mat < 0.8 {
                     let albedo = Color::random(0.0, 1.0) * Color::random(0.0, 1.0);
-                    Rc::new(DiffuseLambertian::new(albedo))
+                    Material::DiffuseLambertian { albedo }
                 } else if choose_mat < 0.95 {
                     let albedo = Color::random(0.5, 1.0);
                     let fuzz = random_double(0.0, 0.5);
-                    Rc::new(Metal::new(albedo, fuzz))
+                    Material::Metal { albedo, fuzz }
                 } else {
-                    Rc::new(Dielectric::new(1.5)) // 1.5 is glass
+                    Material::Dielectric { ir: 1.5 } // 1.5 is glas
                 };
                 world.add(Box::new(Sphere::new(center, 0.2, material)));
             }
@@ -164,18 +172,23 @@ fn create_random_scene() -> HittableList {
     world.add(Box::new(Sphere::new(
         Point3::new(0.0, 1.0, 0.0),
         0.5,
-        Rc::new(Dielectric::new(1.5)),
+        Material::Dielectric { ir: 1.5 },
     )));
 
     world.add(Box::new(Sphere::new(
         Point3::new(-4.0, 1.0, 0.0),
         0.5,
-        Rc::new(DiffuseLambertian::new(Color::new(0.1, 0.2, 0.5))),
+        Material::DiffuseLambertian {
+            albedo: Color::new(0.1, 0.2, 0.5),
+        },
     )));
     world.add(Box::new(Sphere::new(
         Point3::new(4.0, 1.0, 0.0),
         0.5,
-        Rc::new(Metal::new(Color::new(0.8, 0.6, 0.2), 0.0)),
+        Material::Metal {
+            albedo: Color::new(0.8, 0.6, 0.2),
+            fuzz: 0.0,
+        },
     )));
 
     world
@@ -183,7 +196,7 @@ fn create_random_scene() -> HittableList {
 
 fn run(image_filename: &str) {
     // scene
-    let generate_random_scene = true;
+    let generate_random_scene = false;
 
     // image & rendering
     let aspect_ratio: f64 = if generate_random_scene {
@@ -241,6 +254,12 @@ fn run(image_filename: &str) {
         )
     };
 
+    let world = if generate_random_scene {
+        create_random_scene()
+    } else {
+        create_fixed_scene()
+    };
+
     type RenderLine = (i32, Vec<RGB8>);
     let (tx, rx) = flume::unbounded::<RenderLine>();
 
@@ -251,34 +270,25 @@ fn run(image_filename: &str) {
             .rev()
             .collect::<Vec<_>>()
             .into_par_iter()
-            .for_each_init(
-                || {
-                    if generate_random_scene {
-                        create_random_scene()
-                    } else {
-                        create_fixed_scene()
-                    }
-                },
-                |world, j| {
-                    let mut line_pixels = Vec::with_capacity(image_width as usize);
-                    for i in 0..image_width {
-                        let mut pixel_color: Color = Color::zero();
-                        for _ in 0..samples_per_pixel {
-                            let u = (i as f64 + util::random_double_unit())
-                                / (image_width as f64 - 1.0);
-                            let v = (j as f64 + util::random_double_unit())
-                                / (image_height as f64 - 1.0);
-                            let r = cam.get_ray(u, v);
-                            pixel_color += ray_color(r, world, render_mode);
-                        }
-
-                        let rgb8 = color_as_rgb8(pixel_color, samples_per_pixel);
-                        line_pixels.push(rgb8);
+            .for_each(|j| {
+                let mut line_pixels = Vec::with_capacity(image_width as usize);
+                for i in 0..image_width {
+                    let mut pixel_color: Color = Color::zero();
+                    for _ in 0..samples_per_pixel {
+                        let u =
+                            (i as f64 + util::random_double_unit()) / (image_width as f64 - 1.0);
+                        let v =
+                            (j as f64 + util::random_double_unit()) / (image_height as f64 - 1.0);
+                        let r = cam.get_ray(u, v);
+                        pixel_color += ray_color(r, &world, render_mode);
                     }
 
-                    tx.send((j, line_pixels)).unwrap();
-                },
-            );
+                    let rgb8 = color_as_rgb8(pixel_color, samples_per_pixel);
+                    line_pixels.push(rgb8);
+                }
+
+                tx.send((j, line_pixels)).unwrap();
+            });
     };
 
     let output_image_fn = || {
