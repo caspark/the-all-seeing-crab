@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use crate::{
     material::Material,
     ray::Ray,
@@ -7,23 +5,23 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
-pub(crate) struct HitRecord {
+pub(crate) struct HitRecord<'m> {
     /// How far along the ray the hit happened
     pub t: f64,
     /// Point (location) that the hit occurred at
     pub p: Point3,
     pub normal: Vec3,
     pub front_face: bool,
-    pub mat_ptr: Arc<dyn Material>,
+    pub mat_ptr: &'m dyn Material,
 }
 
-impl HitRecord {
-    pub(crate) fn new(
+impl HitRecord<'_> {
+    pub(crate) fn new<'m>(
         t: f64,
         r: &Ray,
         outward_normal: Vec3,
-        material: Arc<dyn Material>,
-    ) -> HitRecord {
+        material: &'m dyn Material,
+    ) -> HitRecord<'m> {
         let p = r.at(t);
         let front_face = r.direction().dot(outward_normal) < 0.0;
         let normal = if front_face {

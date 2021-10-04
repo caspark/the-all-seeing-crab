@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use crate::{
     hittable::{HitRecord, Hittable},
     material::Material,
@@ -9,11 +7,11 @@ use crate::{
 
 use derive_more::Constructor;
 
-#[derive(Debug, Clone, Constructor)]
+#[derive(Debug, Constructor)]
 pub(crate) struct Sphere {
     pub center: Point3,
     pub radius: f64,
-    pub material: Arc<dyn Material + Send + Sync>,
+    pub material: Box<dyn Material + Send + Sync>,
 }
 
 impl Hittable for Sphere {
@@ -41,6 +39,6 @@ impl Hittable for Sphere {
         let t = root;
         let p = r.at(t);
         let outward_normal: Vec3 = (p - self.center) / self.radius;
-        Some(HitRecord::new(t, r, outward_normal, self.material.clone()))
+        Some(HitRecord::new(t, r, outward_normal, &*self.material))
     }
 }
