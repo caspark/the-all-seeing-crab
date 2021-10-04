@@ -21,6 +21,7 @@ use crate::{
     color::{color_as_rgb8, rgb8_as_terminal_char},
     material::DiffuseLambertian,
     sphere::Sphere,
+    vec3::Vec3,
 };
 
 #[allow(dead_code)]
@@ -109,7 +110,7 @@ fn create_world() -> HittableList {
     )));
     hittables.add(Box::new(Sphere::new(
         Point3::new(-1.0, 0.0, -1.0),
-        -0.4,
+        -0.45,
         material_left,
     )));
     hittables.add(Box::new(Sphere::new(
@@ -149,7 +150,13 @@ fn run(image_filename: &str) {
     );
 
     // camera
-    let cam = Camera::new(90.0, aspect_ratio);
+    let cam = Camera::new(
+        Point3::new(-2.0, 2.0, 1.0),
+        Point3::new(0.0, 0.0, -1.0),
+        Vec3::new(0.0, 1.0, 0.0),
+        20.0,
+        aspect_ratio,
+    );
 
     type RenderLine = (i32, Vec<RGB8>);
     let (tx, rx) = flume::unbounded::<RenderLine>();
