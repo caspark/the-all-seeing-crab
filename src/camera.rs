@@ -18,8 +18,8 @@ pub(crate) struct Camera {
 
 impl Camera {
     pub fn new(
-        lookfrom: Point3,
-        lookat: Point3,
+        look_from: Point3,
+        look_at: Point3,
         vup: Vec3,
         vfov: f64,
         aspect_ratio: f64,
@@ -28,8 +28,8 @@ impl Camera {
     ) -> Camera {
         println!(
             "Looking from {from} to {at}, with up = {vup}",
-            from = lookfrom,
-            at = lookat,
+            from = look_from,
+            at = look_at,
             vup = vup
         );
 
@@ -38,7 +38,7 @@ impl Camera {
         let viewport_height: f64 = 2.0 * h;
         let viewport_width: f64 = aspect_ratio * viewport_height;
 
-        let w = (lookfrom - lookat).to_unit();
+        let w = (look_from - look_at).to_unit();
         let u = vup.cross(w).to_unit();
         let v = w.cross(u);
         println!(
@@ -54,7 +54,7 @@ impl Camera {
             focus_dist = focus_dist,
         );
 
-        let origin: Point3 = lookfrom;
+        let origin: Point3 = look_from;
         let horizontal = focus_dist * viewport_width * u;
         let vertical = focus_dist * viewport_height * v;
         let lower_left_corner = origin - horizontal / 2.0 - vertical / 2.0 - focus_dist * w;

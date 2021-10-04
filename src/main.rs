@@ -150,15 +150,23 @@ fn run(image_filename: &str) {
     );
 
     // camera
-    let cam = Camera::new(
-        Point3::new(-2.0, 2.0, 1.0),
-        Point3::new(0.0, 0.0, -1.0),
-        Vec3::new(0.0, 1.0, 0.0),
-        20.0,
-        aspect_ratio,
-        0.25,
-        3.25,
-    );
+    let cam = {
+        let look_from = Point3::new(3.0, 3.0, 2.0);
+        let look_at = Point3::new(0.0, 0.0, -1.0);
+        let vup = Vec3::new(0.0, 1.0, 0.0);
+        let vfov = 20.0;
+        let focus_dist = (look_from - look_at).length();
+        let aperture = 1.0;
+        Camera::new(
+            look_from,
+            look_at,
+            vup,
+            vfov,
+            aspect_ratio,
+            aperture,
+            focus_dist,
+        )
+    };
 
     type RenderLine = (i32, Vec<RGB8>);
     let (tx, rx) = flume::unbounded::<RenderLine>();
