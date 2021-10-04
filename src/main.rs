@@ -156,6 +156,8 @@ fn run(image_filename: &str) {
         Vec3::new(0.0, 1.0, 0.0),
         20.0,
         aspect_ratio,
+        0.25,
+        3.25,
     );
 
     type RenderLine = (i32, Vec<RGB8>);
