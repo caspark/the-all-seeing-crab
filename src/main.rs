@@ -186,11 +186,7 @@ fn run(image_filename: &str) {
     let generate_random_scene = true;
 
     // image & rendering
-    let aspect_ratio: f64 = if generate_random_scene {
-        3.0 / 2.0
-    } else {
-        16.0 / 9.0
-    };
+    let aspect_ratio: f64 = 16.0 / 9.0;
     let image_width: i32 = 400;
     let image_height: i32 = (image_width as f64 / aspect_ratio) as i32;
     let image_pixel_count = (image_width * image_height) as usize;
