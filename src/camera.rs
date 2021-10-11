@@ -1,6 +1,6 @@
 use crate::{
     ray::Ray,
-    util::degrees_to_radians,
+    util::{degrees_to_radians, random_double},
     vec3::{Point3, Vec3},
 };
 
@@ -14,6 +14,10 @@ pub(crate) struct Camera {
     pub v: Vec3,
     pub w: Vec3,
     pub lens_radius: f64,
+    /// Shutter open time
+    pub time0: f64,
+    /// Shutter close time
+    pub time1: f64,
 }
 
 impl Camera {
@@ -25,6 +29,8 @@ impl Camera {
         aspect_ratio: f64,
         aperture: f64,
         focus_dist: f64,
+        time0: f64,
+        time1: f64,
     ) -> Camera {
         println!(
             "Looking from {from} to {at}, with up = {vup}",
@@ -69,6 +75,8 @@ impl Camera {
             v,
             w,
             lens_radius,
+            time0,
+            time1,
         }
     }
 
@@ -79,6 +87,7 @@ impl Camera {
         Ray::new(
             self.origin + offset,
             self.lower_left_corner + s * self.horizontal + t * self.vertical - self.origin - offset,
+            Some(random_double(self.time0, self.time1)),
         )
     }
 }

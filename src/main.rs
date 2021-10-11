@@ -2,12 +2,14 @@ mod camera;
 mod color;
 mod hittable;
 mod material;
+mod moving_sphere;
 mod ray;
 mod sphere;
 mod util;
 mod vec3;
 
 use material::{Dielectric, Material, Metal};
+use moving_sphere::MovingSphere;
 use rayon::prelude::*;
 use std::{env, f64::INFINITY};
 use util::random_double;
@@ -156,7 +158,12 @@ fn create_random_scene() -> HittableList {
                 } else {
                     Box::new(Dielectric::new(1.5)) // 1.5 is glass
                 };
-                world.add(Box::new(Sphere::new(center, 0.2, material)));
+                world.add(if choose_mat < 0.4 {
+                    Box::new(Sphere::new(center, 0.2, material))
+                } else {
+                    let center2 = center + Vec3::new(0.0, random_double(0.0, 0.5), 0.0);
+                    Box::new(MovingSphere::new(center, center2, 0.0, 1.0, 0.2, material))
+                });
             }
         }
     }
@@ -234,6 +241,8 @@ fn run(image_filename: &str) {
             aspect_ratio,
             aperture,
             focus_dist,
+            0.0,
+            1.0,
         )
     };
 

@@ -18,7 +18,7 @@ pub(crate) struct DiffuseHack {
 }
 
 impl Material for DiffuseHack {
-    fn scatter(&self, _r_in: Ray, rec: &HitRecord) -> Option<(Color, Ray)> {
+    fn scatter(&self, r_in: Ray, rec: &HitRecord) -> Option<(Color, Ray)> {
         let mut scatter_direction = rec.normal + Vec3::random_in_unit_sphere();
 
         // avoid degenerate scatter direction (avoid infinities and NaNs)
@@ -26,7 +26,10 @@ impl Material for DiffuseHack {
             scatter_direction = rec.normal;
         }
 
-        Some((self.albedo, Ray::new(rec.p, scatter_direction)))
+        Some((
+            self.albedo,
+            Ray::new(rec.p, scatter_direction, Some(r_in.time())),
+        ))
     }
 }
 
@@ -37,7 +40,7 @@ pub(crate) struct DiffuseLambertian {
 }
 
 impl Material for DiffuseLambertian {
-    fn scatter(&self, _r_in: Ray, rec: &HitRecord) -> Option<(Color, Ray)> {
+    fn scatter(&self, r_in: Ray, rec: &HitRecord) -> Option<(Color, Ray)> {
         let mut scatter_direction = rec.normal + Vec3::random_unit_vector();
 
         // avoid degenerate scatter direction (avoid infinities and NaNs)
@@ -45,7 +48,10 @@ impl Material for DiffuseLambertian {
             scatter_direction = rec.normal;
         }
 
-        Some((self.albedo, Ray::new(rec.p, scatter_direction)))
+        Some((
+            self.albedo,
+            Ray::new(rec.p, scatter_direction, Some(r_in.time())),
+        ))
     }
 }
 
@@ -56,7 +62,7 @@ pub(crate) struct DiffuseHemispherical {
 }
 
 impl Material for DiffuseHemispherical {
-    fn scatter(&self, _r_in: Ray, rec: &HitRecord) -> Option<(Color, Ray)> {
+    fn scatter(&self, r_in: Ray, rec: &HitRecord) -> Option<(Color, Ray)> {
         let mut scatter_direction = Vec3::random_in_hemisphere(rec.normal);
 
         // avoid degenerate scatter direction (avoid infinities and NaNs)
@@ -64,7 +70,10 @@ impl Material for DiffuseHemispherical {
             scatter_direction = rec.normal;
         }
 
-        Some((self.albedo, Ray::new(rec.p, scatter_direction)))
+        Some((
+            self.albedo,
+            Ray::new(rec.p, scatter_direction, Some(r_in.time())),
+        ))
     }
 }
 
@@ -85,9 +94,13 @@ impl Metal {
 }
 
 impl Material for Metal {
-    fn scatter(&self, _r_in: Ray, rec: &HitRecord) -> Option<(Color, Ray)> {
-        let reflected = Vec3::reflect(_r_in.direction().to_unit(), rec.normal);
-        let scattered = Ray::new(rec.p, reflected + self.fuzz * Vec3::random_in_unit_sphere());
+    fn scatter(&self, r_in: Ray, rec: &HitRecord) -> Option<(Color, Ray)> {
+        let reflected = Vec3::reflect(r_in.direction().to_unit(), rec.normal);
+        let scattered = Ray::new(
+            rec.p,
+            reflected + self.fuzz * Vec3::random_in_unit_sphere(),
+            Some(r_in.time()),
+        );
         if scattered.direction().dot(rec.normal) > 0.0 {
             Some((self.albedo, scattered))
         } else {
@@ -141,7 +154,7 @@ impl Material for Dielectric {
             Vec3::refract(unit_direction, rec.normal, refraction_ratio)
         };
 
-        let scattered = Ray::new(rec.p, direction);
+        let scattered = Ray::new(rec.p, direction, Some(r_in.time()));
         Some((attenuation, scattered))
     }
 }
