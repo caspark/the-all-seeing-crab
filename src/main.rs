@@ -43,7 +43,7 @@ enum RayColorMode {
     Material { depth: i32 },
 }
 
-fn ray_color(r: Ray, world: Box<&dyn Hittable>, mode: RayColorMode) -> Color {
+fn ray_color(r: Ray, world: &dyn Hittable, mode: RayColorMode) -> Color {
     if let RayColorMode::Material { depth } = mode {
         if depth <= 0 {
             return Color::zero();
@@ -276,7 +276,7 @@ fn run(image_filename: &str) {
                         let v =
                             (j as f64 + util::random_double_unit()) / (image_height as f64 - 1.0);
                         let r = cam.get_ray(u, v);
-                        pixel_color += ray_color(r, Box::new(&world as &dyn Hittable), render_mode);
+                        pixel_color += ray_color(r, &world, render_mode);
                     }
 
                     let rgb8 = color_as_rgb8(pixel_color, samples_per_pixel);

@@ -17,12 +17,7 @@ pub(crate) struct HitRecord<'m> {
 }
 
 impl HitRecord<'_> {
-    pub(crate) fn new<'m>(
-        t: f64,
-        r: Ray,
-        outward_normal: Vec3,
-        material: &'m dyn Material,
-    ) -> HitRecord<'m> {
+    pub(crate) fn new(t: f64, r: Ray, outward_normal: Vec3, material: &dyn Material) -> HitRecord {
         let p = r.at(t);
         let front_face = r.direction().dot(outward_normal) < 0.0;
         let normal = if front_face {

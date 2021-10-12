@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, panic};
+use std::cmp::Ordering;
 
 use crate::{
     aabb::Aabb,
@@ -16,8 +16,6 @@ pub(crate) struct BvhNode {
 
 impl BvhNode {
     pub(crate) fn new(mut objects: Vec<Box<dyn Hittable>>, time0: f64, time1: f64) -> BvhNode {
-        let size = objects.len();
-
         let axis = random_int(0, 2);
         let comparator = match axis {
             0 => Self::box_compare_x,
@@ -27,7 +25,7 @@ impl BvhNode {
 
         let left;
         let right;
-        assert!(objects.len() != 0);
+        assert!(!objects.is_empty());
         if objects.len() == 1 {
             left = objects.pop().unwrap();
             right = None;
@@ -35,7 +33,7 @@ impl BvhNode {
             let second = objects.pop().unwrap();
             let first = objects.pop().unwrap();
 
-            if comparator(&first, &second) == Ordering::Less {
+            if comparator(first.as_ref(), second.as_ref()) == Ordering::Less {
                 left = first;
                 right = Some(second);
             } else {
@@ -43,7 +41,7 @@ impl BvhNode {
                 right = Some(first);
             }
         } else {
-            objects.sort_by(|a, b| comparator(a, b));
+            objects.sort_by(|a, b| comparator(a.as_ref(), b.as_ref()));
 
             let mid = objects.len() / 2;
             let half2 = objects.split_off(mid);
@@ -68,17 +66,17 @@ impl BvhNode {
         }
     }
 
-    fn box_compare_x(a: &Box<dyn Hittable>, b: &Box<dyn Hittable>) -> Ordering {
+    fn box_compare_x(a: &dyn Hittable, b: &dyn Hittable) -> Ordering {
         Self::box_compare(a, b, 0)
     }
-    fn box_compare_y(a: &Box<dyn Hittable>, b: &Box<dyn Hittable>) -> Ordering {
+    fn box_compare_y(a: &dyn Hittable, b: &dyn Hittable) -> Ordering {
         Self::box_compare(a, b, 1)
     }
-    fn box_compare_z(a: &Box<dyn Hittable>, b: &Box<dyn Hittable>) -> Ordering {
+    fn box_compare_z(a: &dyn Hittable, b: &dyn Hittable) -> Ordering {
         Self::box_compare(a, b, 2)
     }
 
-    fn box_compare(a: &Box<dyn Hittable>, b: &Box<dyn Hittable>, axis: usize) -> Ordering {
+    fn box_compare(a: &dyn Hittable, b: &dyn Hittable, axis: usize) -> Ordering {
         let box_a = a
             .bounding_box(0.0, 0.0)
             .expect("A must have a bounding box");
