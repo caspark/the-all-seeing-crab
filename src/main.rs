@@ -31,6 +31,14 @@ use crate::{
     vec3::Vec3,
 };
 
+enum RenderCommand {
+    Render,
+}
+
+enum RenderResult {
+    Image { data: Vec<RGB8> },
+}
+
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy)]
 enum RayColorMode {
@@ -85,12 +93,15 @@ fn main() {
 }
 
 fn run(image_filename: &str) {
+    let (command_tx, command_rx) = flume::unbounded::<RenderCommand>();
+    let (result_tx, result_rx) = flume::unbounded::<RenderResult>();
+
     let filename = image_filename.to_owned();
     let render_thread = std::thread::spawn(move || {
-        render_and_save_image(&filename);
+        render_and_save_image(&filename, command_rx, result_tx);
     });
 
-    let app = ui::TemplateApp::default();
+    let app = ui::TemplateApp::new(command_tx, result_rx);
     let native_options = eframe::NativeOptions::default();
     eframe::run_native(Box::new(app), native_options);
     render_thread.join().unwrap();
@@ -205,7 +216,11 @@ fn create_random_scene() -> BvhNode {
     BvhNode::new(world, 0.0, 1.0)
 }
 
-fn render_and_save_image(image_filename: &str) {
+fn render_and_save_image(
+    image_filename: &str,
+    render_command_rx: flume::Receiver<RenderCommand>,
+    render_result_tx: flume::Sender<RenderResult>,
+) {
     // scene
     let generate_random_scene = false;
 
@@ -272,32 +287,37 @@ fn render_and_save_image(image_filename: &str) {
     type RenderLine = (i32, Vec<RGB8>);
     let (tx, rx) = flume::unbounded::<RenderLine>();
 
-    let render_image_fn = || {
-        println!("Rendering w/ {} threads...", render_threads);
+    let render_image_fn = || loop {
+        match render_command_rx.recv() {
+            Ok(RenderCommand::Render) => {
+                println!("Rendering w/ {} threads...", render_threads);
 
-        (0..image_height)
-            .rev()
-            .collect::<Vec<_>>()
-            .into_par_iter()
-            .for_each(|j| {
-                let mut line_pixels = Vec::with_capacity(image_width as usize);
-                for i in 0..image_width {
-                    let mut pixel_color: Color = Color::zero();
-                    for _ in 0..samples_per_pixel {
-                        let u =
-                            (i as f64 + util::random_double_unit()) / (image_width as f64 - 1.0);
-                        let v =
-                            (j as f64 + util::random_double_unit()) / (image_height as f64 - 1.0);
-                        let r = cam.get_ray(u, v);
-                        pixel_color += ray_color(r, &world, render_mode);
-                    }
+                (0..image_height)
+                    .rev()
+                    .collect::<Vec<_>>()
+                    .into_par_iter()
+                    .for_each(|j| {
+                        let mut line_pixels = Vec::with_capacity(image_width as usize);
+                        for i in 0..image_width {
+                            let mut pixel_color: Color = Color::zero();
+                            for _ in 0..samples_per_pixel {
+                                let u = (i as f64 + util::random_double_unit())
+                                    / (image_width as f64 - 1.0);
+                                let v = (j as f64 + util::random_double_unit())
+                                    / (image_height as f64 - 1.0);
+                                let r = cam.get_ray(u, v);
+                                pixel_color += ray_color(r, &world, render_mode);
+                            }
 
-                    let rgb8 = color_as_rgb8(pixel_color, samples_per_pixel);
-                    line_pixels.push(rgb8);
-                }
+                            let rgb8 = color_as_rgb8(pixel_color, samples_per_pixel);
+                            line_pixels.push(rgb8);
+                        }
 
-                tx.send((j, line_pixels)).unwrap();
-            });
+                        tx.send((j, line_pixels)).unwrap();
+                    });
+            }
+            Err(flume::RecvError::Disconnected) => break, // nothing to do, just quit quietly
+        }
     };
 
     let output_image_fn = || {
@@ -350,6 +370,13 @@ fn render_and_save_image(image_filename: &str) {
             }
             assert_eq!(image_buffer.len(), image_pixel_count);
         }
+
+        render_result_tx
+            .send(RenderResult::Image {
+                data: image_buffer.clone(),
+            })
+            .ok()
+            .expect("UI should still be running when render result is sent to it");
 
         println!(
             "Saving resulting image to disk at {} in PNG format...",

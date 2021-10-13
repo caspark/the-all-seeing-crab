@@ -1,18 +1,21 @@
-use eframe::{egui, epi};
+use eframe::{
+    egui::{self, TextureId},
+    epi,
+};
+use rgb::RGB8;
 
-/// We derive Deserialize/Serialize so we can persist app state on shutdown.
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
+use crate::{RenderCommand, RenderResult};
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
-pub struct TemplateApp {
-    // Example stuff:
+struct UiSettings {
     label: String,
 
-    // this how you opt-out of serialization of a member
     #[serde(skip)]
     value: f32,
 }
 
-impl Default for TemplateApp {
+impl Default for UiSettings {
     fn default() -> Self {
         Self {
             // Example stuff:
@@ -22,9 +25,38 @@ impl Default for TemplateApp {
     }
 }
 
+#[derive(Debug, Default)]
+struct UiData {
+    last_render_result: Option<Vec<RGB8>>,
+    last_render_tex: Option<TextureId>,
+}
+
+#[derive(Debug)]
+pub struct TemplateApp {
+    settings: UiSettings,
+    data: UiData,
+
+    render_command_tx: flume::Sender<RenderCommand>,
+    render_result_rx: flume::Receiver<RenderResult>,
+}
+
+impl TemplateApp {
+    pub(crate) fn new(
+        render_command_tx: flume::Sender<RenderCommand>,
+        render_result_rx: flume::Receiver<RenderResult>,
+    ) -> Self {
+        TemplateApp {
+            settings: Default::default(),
+            data: Default::default(),
+            render_command_tx,
+            render_result_rx,
+        }
+    }
+}
+
 impl epi::App for TemplateApp {
     fn name(&self) -> &str {
-        "egui template"
+        "All Seeing Crab"
     }
 
     /// Called once before the first frame.
@@ -36,19 +68,59 @@ impl epi::App for TemplateApp {
     ) {
         // Load previous app state (if any).
         if let Some(storage) = _storage {
-            *self = epi::get_value(storage, epi::APP_KEY).unwrap_or_default()
+            self.settings = epi::get_value(storage, epi::APP_KEY).unwrap_or_default()
         }
+
+        self.render_command_tx
+            .send(RenderCommand::Render)
+            .ok()
+            .expect("initial render command send should succeed");
     }
 
     /// Called by the frame work to save state before shutdown.
     fn save(&mut self, storage: &mut dyn epi::Storage) {
-        epi::set_value(storage, epi::APP_KEY, self);
+        epi::set_value(storage, epi::APP_KEY, &self.settings);
     }
 
     /// Called each time the UI needs repainting, which may be many times per second.
     /// Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
     fn update(&mut self, ctx: &egui::CtxRef, frame: &mut epi::Frame<'_>) {
-        let Self { label, value } = self;
+        match self.render_result_rx.try_recv() {
+            Ok(RenderResult::Image { data }) => {
+                let pixels = data
+                    .iter()
+                    .map(|rgb| egui::Color32::from_rgba_premultiplied(rgb.r, rgb.g, rgb.b, 255))
+                    .collect::<Vec<_>>();
+
+                // let pixels: Vec<_> = (0..(width * height))
+                //     .into_iter()
+                //     .map(|_| {
+                //         egui::Color32::from_rgba_premultiplied(
+                //             rand::random(),
+                //             rand::random(),
+                //             rand::random(),
+                //             255,
+                //         )
+                //     })
+                //     .collect();
+
+                if let Some(existing_tex) = self.data.last_render_tex {
+                    frame.tex_allocator().free(existing_tex);
+                }
+
+                self.data.last_render_tex = Some(
+                    frame
+                        .tex_allocator()
+                        .alloc_srgba_premultiplied((400, 225), &pixels),
+                );
+
+                self.data.last_render_result = Some(data);
+            }
+            Err(flume::TryRecvError::Empty) => (),
+            Err(flume::TryRecvError::Disconnected) => {
+                panic!("Rendering thread seems to have exited before UI!")
+            }
+        };
 
         // Examples of how to create different panels and windows.
         // Pick whichever suits you.
@@ -71,12 +143,12 @@ impl epi::App for TemplateApp {
 
             ui.horizontal(|ui| {
                 ui.label("Write something: ");
-                ui.text_edit_singleline(label);
+                ui.text_edit_singleline(&mut self.settings.label);
             });
 
-            ui.add(egui::Slider::new(value, 0.0..=10.0).text("value"));
+            ui.add(egui::Slider::new(&mut self.settings.value, 0.0..=10.0).text("value"));
             if ui.button("Increment").clicked() {
-                *value += 1.0;
+                self.settings.value += 1.0;
             }
 
             ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
@@ -97,30 +169,17 @@ impl epi::App for TemplateApp {
             ));
             egui::warn_if_debug_build(ui);
 
-            let width = 400;
-            let height = 200;
-            let pixels: Vec<_> = (0..(width * height))
-                .into_iter()
-                .map(|_| {
-                    egui::Color32::from_rgba_premultiplied(
-                        rand::random(),
-                        rand::random(),
-                        rand::random(),
-                        255,
-                    )
-                })
-                .collect();
-
-            let texture = frame
-                .tex_allocator()
-                .alloc_srgba_premultiplied((width, height), &pixels);
-
-            let sizing = egui::Vec2::new(width as f32, height as f32);
-            ui.heading("image goes here");
-            ui.image(texture, sizing); //FIXME doesn't actually render the image
-            ui.heading("image should be above");
-
-            // frame.tex_allocator().free(texture);
+            let sizing = egui::Vec2::new(400 as f32, 225 as f32);
+            match self.data.last_render_tex {
+                Some(tex) => {
+                    ui.heading("image goes here");
+                    ui.image(tex, sizing);
+                    ui.heading("image should be above");
+                }
+                None => {
+                    ui.heading("Still rendering...");
+                }
+            }
         });
 
         if false {
