@@ -96,6 +96,31 @@ impl epi::App for TemplateApp {
                 "Source code."
             ));
             egui::warn_if_debug_build(ui);
+
+            let width = 400;
+            let height = 200;
+            let pixels: Vec<_> = (0..(width * height))
+                .into_iter()
+                .map(|_| {
+                    egui::Color32::from_rgba_premultiplied(
+                        rand::random(),
+                        rand::random(),
+                        rand::random(),
+                        255,
+                    )
+                })
+                .collect();
+
+            let texture = frame
+                .tex_allocator()
+                .alloc_srgba_premultiplied((width, height), &pixels);
+
+            let sizing = egui::Vec2::new(width as f32, height as f32);
+            ui.heading("image goes here");
+            ui.image(texture, sizing); //FIXME doesn't actually render the image
+            ui.heading("image should be above");
+
+            // frame.tex_allocator().free(texture);
         });
 
         if false {

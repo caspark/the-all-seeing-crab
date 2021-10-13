@@ -75,17 +75,25 @@ fn ray_color(r: Ray, world: &dyn Hittable, mode: RayColorMode) -> Color {
 }
 
 fn main() {
+    let args: Vec<String> = env::args().collect();
+    match args[..] {
+        [] => panic!("Could not extract executable name as first arg"),
+        [ref exe] => print_usage_then_die(exe, "output file expected as first argument"),
+        [_, ref image_filename] => run(image_filename),
+        [ref exe, _, ..] => print_usage_then_die(exe, "Max one argument expected"),
+    };
+}
+
+fn run(image_filename: &str) {
+    let filename = image_filename.to_owned();
+    let render_thread = std::thread::spawn(move || {
+        render_and_save_image(&filename);
+    });
+
     let app = ui::TemplateApp::default();
     let native_options = eframe::NativeOptions::default();
     eframe::run_native(Box::new(app), native_options);
-
-    // let args: Vec<String> = env::args().collect();
-    // match args[..] {
-    //     [] => panic!("Could not extract executable name as first arg"),
-    //     [ref exe] => print_usage_then_die(exe, "output file expected as first argument"),
-    //     [_, ref image_filename] => run(image_filename),
-    //     [ref exe, _, ..] => print_usage_then_die(exe, "Max one argument expected"),
-    // };
+    render_thread.join().unwrap();
 }
 
 fn print_usage_then_die(exe: &str, error: &str) {
@@ -197,9 +205,9 @@ fn create_random_scene() -> BvhNode {
     BvhNode::new(world, 0.0, 1.0)
 }
 
-fn run(image_filename: &str) {
+fn render_and_save_image(image_filename: &str) {
     // scene
-    let generate_random_scene = true;
+    let generate_random_scene = false;
 
     // image & rendering
     let aspect_ratio: f64 = 16.0 / 9.0;
