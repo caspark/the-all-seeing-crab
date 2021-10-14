@@ -181,30 +181,21 @@ impl epi::App for TemplateApp {
                     println!("Done saving.");
                 }
 
-                // let pixels = data
-                //     .iter()
-                //     .map(|rgb| egui::Color32::from_rgba_premultiplied(rgb.r, rgb.g, rgb.b, 255))
-                //     .collect::<Vec<_>>();
-
-                // // let pixels: Vec<_> = (0..(width * height))
-                // //     .into_iter()
-                // //     .map(|_| {
-                // //         egui::Color32::from_rgba_premultiplied(
-                // //             rand::random(),
-                // //             rand::random(),
-                // //             rand::random(),
-                // //             255,
-                // //         )
-                // //     })
-                // //     .collect();
-
-                // self.data.last_render_tex = Some(
-                //     frame
-                //         .tex_allocator()
-                //         .alloc_srgba_premultiplied((400, 225), &pixels),
-                // );
-
-                // self.data.last_render_result = Some(data);
+                // update texture to display in the UI
+                if let Some(existing_tex) = self.data.last_render_tex {
+                    frame.tex_allocator().free(existing_tex);
+                }
+                let tex_pixels = self
+                    .data
+                    .last_render_pixels
+                    .iter()
+                    .map(|rgb| egui::Color32::from_rgba_premultiplied(rgb.r, rgb.g, rgb.b, 255))
+                    .collect::<Vec<_>>();
+                self.data.last_render_tex = Some(
+                    frame
+                        .tex_allocator()
+                        .alloc_srgba_premultiplied((400, 225), &tex_pixels),
+                );
             }
             Err(flume::TryRecvError::Empty) => (),
             Err(flume::TryRecvError::Disconnected) => {
