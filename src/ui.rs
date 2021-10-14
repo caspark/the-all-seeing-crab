@@ -15,6 +15,16 @@ struct UiData {
     last_render_tex: Option<TextureId>,
 }
 
+impl UiData {
+    fn complete(&self) -> bool {
+        self.last_render_lines_received == self.last_render_height
+    }
+
+    fn percent_complete(&self) -> f32 {
+        self.last_render_lines_received as f32 / self.last_render_height as f32
+    }
+}
+
 #[derive(Debug)]
 pub struct TemplateApp {
     config: RenderConfig,
@@ -42,7 +52,7 @@ impl TemplateApp {
         }
     }
 
-    pub(crate) fn trigger_render(&self) {
+    fn trigger_render(&self) {
         println!(
             "Triggering render of {width}x{height} image (total {count} pixels), with {samples} samples per pixel",
             width =self. config.image_width,
@@ -56,6 +66,79 @@ impl TemplateApp {
             })
             .ok()
             .expect("render command send should succeed");
+    }
+
+    fn store_pixel_line(&mut self, line_num: usize, line_pixels: Vec<RGB8>) {
+        assert_eq!(line_pixels.len(), self.config.image_width);
+        assert!(self.data.last_render_lines_received < self.data.last_render_height);
+        self.data.last_render_lines_received += 1;
+
+        // let mut image_buffer =
+        //     vec![RGB8 { r: 0, g: 0, b: 0 }; self.config.image_pixel_count()];
+
+        // update the image buffer
+        let line_num = self.config.image_height - line_num - 1;
+        let offset_start = line_num as usize * self.config.image_width;
+        let offset_end = offset_start + self.config.image_width;
+        self.data.last_render_pixels[offset_start..offset_end]
+            .copy_from_slice(line_pixels.as_slice());
+
+        // //terminal progress indicator state
+        // let progress_indicator_width = 100i32;
+        // let progress_indicator_height =
+        //     (progress_indicator_width as f64 / self.config.aspect_ratio / 2.0) as i32;
+        // let width_incr = self.config.image_width as i32 / progress_indicator_width;
+        // let height_incr = self.config.image_height as i32 / progress_indicator_height;
+        // let mut progress_lines_written = 0;
+
+        // // render the terminal progress indicator display
+        // // we only want to update the terminal render-in-progress display if the line we just
+        // // received is actually going to change the display
+        // if self.incremental_progress_display && line_num as i32 % height_incr == 0 {
+        //     if progress_lines_written > 0 {
+        //         print!("{}", termion::cursor::Up(progress_lines_written));
+        //         progress_lines_written = 0;
+        //     }
+        //     for j in 0..(self.config.image_height) {
+        //         let showing_progress_for_this_line = j % height_incr as usize == 0;
+        //         for i in 0..(self.config.image_width) {
+        //             if showing_progress_for_this_line && i % width_incr as usize == 0 {
+        //                 let c = rgb8_as_terminal_char(
+        //                     image_buffer[j * self.config.image_width + i],
+        //                 );
+        //                 print!("{}", c);
+        //             }
+        //         }
+        //         if showing_progress_for_this_line {
+        //             println!();
+        //             progress_lines_written += 1;
+        //         }
+        //     }
+        // }
+
+        if self.data.complete() {
+            // make sure we got all the data we should have
+            assert_eq!(
+                self.data.last_render_pixels.len(),
+                self.config.image_pixel_count()
+            );
+
+            println!(
+                "Saving completed image to disk at {} in PNG format...",
+                self.config.output_filename
+            );
+            lodepng::encode_file(
+                &self.config.output_filename,
+                &self.data.last_render_pixels,
+                self.config.image_width,
+                self.config.image_height,
+                lodepng::ColorType::RGB,
+                8,
+            )
+            .expect("Encoding result and saving to disk failed");
+
+            println!("Done saving.");
+        }
     }
 }
 
@@ -87,126 +170,51 @@ impl epi::App for TemplateApp {
     /// Called each time the UI needs repainting, which may be many times per second.
     /// Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
     fn update(&mut self, ctx: &egui::CtxRef, frame: &mut epi::Frame<'_>) {
-        //TODO should pump this channel repeatedly until it's empty
-        match self.render_result_rx.try_recv() {
-            Ok(RenderResult::Reset {
-                image_height,
-                image_width,
-            }) => {
-                self.data.last_render_width = image_width;
-                self.data.last_render_height = image_height;
-                self.data.last_render_pixels =
-                    vec![RGB8 { r: 0, g: 0, b: 0 }; self.config.image_pixel_count()];
-                self.data.last_render_lines_received = 0;
+        loop {
+            match self.render_result_rx.try_recv() {
+                Ok(RenderResult::Reset {
+                    image_height,
+                    image_width,
+                }) => {
+                    self.data.last_render_width = image_width;
+                    self.data.last_render_height = image_height;
+                    self.data.last_render_pixels =
+                        vec![RGB8 { r: 0, g: 0, b: 0 }; self.config.image_pixel_count()];
+                    self.data.last_render_lines_received = 0;
 
-                if let Some(existing_tex) = self.data.last_render_tex {
-                    frame.tex_allocator().free(existing_tex);
-                    self.data.last_render_tex = None;
+                    if let Some(existing_tex) = self.data.last_render_tex {
+                        frame.tex_allocator().free(existing_tex);
+                        self.data.last_render_tex = None;
+                    }
                 }
-            }
-            Ok(RenderResult::ImageLine {
-                line_num,
-                line_pixels,
-            }) => {
-                println!("We got an image line {}", line_num);
+                Ok(RenderResult::ImageLine {
+                    line_num,
+                    line_pixels,
+                }) => {
+                    self.store_pixel_line(line_num, line_pixels);
 
-                assert_eq!(line_pixels.len(), self.config.image_width);
-                assert!(self.data.last_render_lines_received < self.data.last_render_height);
-                self.data.last_render_lines_received += 1;
-
-                // let mut image_buffer =
-                //     vec![RGB8 { r: 0, g: 0, b: 0 }; self.config.image_pixel_count()];
-
-                // update the image buffer
-                let line_num = self.config.image_height - line_num - 1;
-                let offset_start = line_num as usize * self.config.image_width;
-                let offset_end = offset_start + self.config.image_width;
-                self.data.last_render_pixels[offset_start..offset_end]
-                    .copy_from_slice(line_pixels.as_slice());
-
-                // //terminal progress indicator state
-                // let progress_indicator_width = 100i32;
-                // let progress_indicator_height =
-                //     (progress_indicator_width as f64 / self.config.aspect_ratio / 2.0) as i32;
-                // let width_incr = self.config.image_width as i32 / progress_indicator_width;
-                // let height_incr = self.config.image_height as i32 / progress_indicator_height;
-                // let mut progress_lines_written = 0;
-
-                // // render the terminal progress indicator display
-                // // we only want to update the terminal render-in-progress display if the line we just
-                // // received is actually going to change the display
-                // if self.incremental_progress_display && line_num as i32 % height_incr == 0 {
-                //     if progress_lines_written > 0 {
-                //         print!("{}", termion::cursor::Up(progress_lines_written));
-                //         progress_lines_written = 0;
-                //     }
-                //     for j in 0..(self.config.image_height) {
-                //         let showing_progress_for_this_line = j % height_incr as usize == 0;
-                //         for i in 0..(self.config.image_width) {
-                //             if showing_progress_for_this_line && i % width_incr as usize == 0 {
-                //                 let c = rgb8_as_terminal_char(
-                //                     image_buffer[j * self.config.image_width + i],
-                //                 );
-                //                 print!("{}", c);
-                //             }
-                //         }
-                //         if showing_progress_for_this_line {
-                //             println!();
-                //             progress_lines_written += 1;
-                //         }
-                //     }
-                // }
-
-                if self.data.last_render_lines_received == self.data.last_render_height {
-                    // make sure we got all the data we should have
-                    assert_eq!(
-                        self.data.last_render_pixels.len(),
-                        self.config.image_pixel_count()
+                    // update the texture that gets displayed in the UI
+                    if let Some(existing_tex) = self.data.last_render_tex {
+                        frame.tex_allocator().free(existing_tex);
+                    }
+                    let tex_pixels = self
+                        .data
+                        .last_render_pixels
+                        .iter()
+                        .map(|rgb| egui::Color32::from_rgba_premultiplied(rgb.r, rgb.g, rgb.b, 255))
+                        .collect::<Vec<_>>();
+                    self.data.last_render_tex = Some(
+                        frame
+                            .tex_allocator()
+                            .alloc_srgba_premultiplied((400, 225), &tex_pixels),
                     );
-
-                    println!(
-                        "Saving completed image to disk at {} in PNG format...",
-                        self.config.output_filename
-                    );
-                    lodepng::encode_file(
-                        &self.config.output_filename,
-                        &self.data.last_render_pixels,
-                        self.config.image_width,
-                        self.config.image_height,
-                        lodepng::ColorType::RGB,
-                        8,
-                    )
-                    .expect("Encoding result and saving to disk failed");
-
-                    println!("Done saving.");
                 }
-
-                // update texture to display in the UI
-                if let Some(existing_tex) = self.data.last_render_tex {
-                    frame.tex_allocator().free(existing_tex);
+                Err(flume::TryRecvError::Empty) => break,
+                Err(flume::TryRecvError::Disconnected) => {
+                    panic!("Rendering thread seems to have exited before UI!")
                 }
-                let tex_pixels = self
-                    .data
-                    .last_render_pixels
-                    .iter()
-                    .map(|rgb| egui::Color32::from_rgba_premultiplied(rgb.r, rgb.g, rgb.b, 255))
-                    .collect::<Vec<_>>();
-                self.data.last_render_tex = Some(
-                    frame
-                        .tex_allocator()
-                        .alloc_srgba_premultiplied((400, 225), &tex_pixels),
-                );
-            }
-            Err(flume::TryRecvError::Empty) => (),
-            Err(flume::TryRecvError::Disconnected) => {
-                panic!("Rendering thread seems to have exited before UI!")
-            }
-        };
-
-        // Examples of how to create different panels and windows.
-        // Pick whichever suits you.
-        // Tip: a good default choice is to just keep the `CentralPanel`.
-        // For inspiration and more examples, go to https://emilk.github.io/egui
+            };
+        }
 
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             // The top panel is often a good place for a menu bar:
@@ -219,8 +227,8 @@ impl epi::App for TemplateApp {
             });
         });
 
-        egui::SidePanel::left("side_panel").show(ctx, |ui| {
-            ui.heading("Side Panel");
+        egui::SidePanel::left("config_panel").show(ctx, |ui| {
+            ui.heading("Config");
 
             ui.horizontal(|ui| {
                 ui.label("Output filename: ");
@@ -238,30 +246,14 @@ impl epi::App for TemplateApp {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            // The central panel the region left after adding TopPanel's and SidePanel's
-
             ui.heading("Ray tracing result");
             let sizing = egui::Vec2::new(400 as f32, 225 as f32);
-            match self.data.last_render_tex {
-                Some(tex) => {
-                    ui.heading("image goes below");
-                    ui.image(tex, sizing);
-                    if self.data.last_render_lines_received == self.data.last_render_height {}
-                    ui.heading("image should be above");
-                }
-                None => {
-                    ui.heading("Still rendering...");
-                }
+            if let Some(tex_id) = self.data.last_render_tex {
+                ui.image(tex_id, sizing);
+            }
+            if !self.data.complete() {
+                ui.add(egui::ProgressBar::new(self.data.percent_complete()).animate(true));
             }
         });
-
-        if false {
-            egui::Window::new("Window").show(ctx, |ui| {
-                ui.label("Windows can be moved by dragging them.");
-                ui.label("They are automatically sized based on contents.");
-                ui.label("You can turn on resizing and scrolling if you like.");
-                ui.label("You would normally chose either panels OR windows.");
-            });
-        }
     }
 }
