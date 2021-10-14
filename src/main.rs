@@ -30,19 +30,24 @@ use crate::{
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 struct RenderConfig {
-    aspect_ratio: f64,
+    #[serde(skip)] //TODO changing image width and height doesn't work properly yet
     image_width: usize,
+    #[serde(skip)] //TODO changing image width and height doesn't work properly yet
     image_height: usize,
     samples_per_pixel: u32,
+    #[serde(skip)]
     render_mode: RayColorMode,
     generate_random_scene: bool,
-
     output_filename: String,
 }
 
 impl RenderConfig {
     pub(crate) fn image_pixel_count(&self) -> usize {
         self.image_width * self.image_height
+    }
+
+    pub(crate) fn aspect_ratio(&self) -> f64 {
+        self.image_width as f64 / self.image_height as f64
     }
 }
 
@@ -51,7 +56,6 @@ impl Default for RenderConfig {
         let aspect_ratio = 16.0 / 9.0;
         let image_width = 400;
         Self {
-            aspect_ratio,
             image_width,
             image_height: (image_width as f64 / aspect_ratio) as usize,
             samples_per_pixel: 100,
@@ -64,7 +68,7 @@ impl Default for RenderConfig {
                 RayColorMode::Material { depth: 50 }
             },
 
-            generate_random_scene: true,
+            generate_random_scene: false,
             output_filename: "target/output.png".to_owned(),
         }
     }
@@ -310,7 +314,7 @@ fn render_image(config: RenderConfig, render_result_tx: &flume::Sender<RenderRes
             look_at,
             vup,
             vfov,
-            config.aspect_ratio,
+            config.aspect_ratio(),
             aperture,
             focus_dist,
             0.0,
@@ -324,6 +328,8 @@ fn render_image(config: RenderConfig, render_result_tx: &flume::Sender<RenderRes
         create_fixed_scene()
     };
 
+    //TODO quitting the UI while this is running causes a bunch of panics
+    //TODO this can't be interrupted with a new render yet - add "interrupt" and "queue" functionality
     (0..config.image_height)
         .rev()
         .collect::<Vec<_>>()

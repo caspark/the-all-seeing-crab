@@ -13,9 +13,64 @@ struct UiData {
     last_render_lines_received: usize,
     last_render_pixels: Vec<RGB8>,
     last_render_tex: Option<TextureId>,
+
+    terminal_initial_render_done: bool,
+    lines_received_since_last_terminal_render: Vec<usize>,
 }
 
 impl UiData {
+    fn new(width: usize, height: usize) -> Self {
+        let mut d = Self::default();
+        d.last_render_width = width;
+        d.last_render_height = height;
+        d.last_render_pixels = vec![RGB8 { r: 0, g: 0, b: 0 }; width * height];
+        d
+    }
+
+    fn rebuild_texture(&mut self, tex_allocator: &mut dyn eframe::epi::TextureAllocator) {
+        if let Some(existing_tex) = self.last_render_tex {
+            tex_allocator.free(existing_tex);
+        }
+        let tex_pixels = self
+            .last_render_pixels
+            .iter()
+            .map(|rgb| egui::Color32::from_rgba_premultiplied(rgb.r, rgb.g, rgb.b, 255))
+            .collect::<Vec<_>>();
+        self.last_render_tex =
+            Some(tex_allocator.alloc_srgba_premultiplied((400, 225), &tex_pixels));
+    }
+
+    fn clear_texture(&mut self, tex_allocator: &mut dyn eframe::epi::TextureAllocator) {
+        if let Some(existing_tex) = self.last_render_tex {
+            tex_allocator.free(existing_tex);
+            self.last_render_tex = None;
+        }
+    }
+
+    fn save_output_to_file(&self, output_filename: &str) {
+        // make sure we got all the data we should have
+        assert_eq!(
+            self.last_render_pixels.len(),
+            self.last_render_width * self.last_render_height
+        );
+
+        println!(
+            "Saving completed image to disk at {} in PNG format...",
+            output_filename
+        );
+        lodepng::encode_file(
+            output_filename,
+            &self.last_render_pixels,
+            self.last_render_width,
+            self.last_render_height,
+            lodepng::ColorType::RGB,
+            8,
+        )
+        .expect("Encoding result and saving to disk failed");
+
+        println!("Done saving.");
+    }
+
     fn complete(&self) -> bool {
         self.last_render_lines_received == self.last_render_height
     }
@@ -28,7 +83,7 @@ impl UiData {
 #[derive(Debug)]
 pub struct TemplateApp {
     config: RenderConfig,
-    data: UiData,
+    data: Option<UiData>,
     incremental_progress_display: bool,
 
     render_command_tx: flume::Sender<RenderCommand>,
@@ -45,7 +100,7 @@ impl TemplateApp {
         config.output_filename = output_filename.to_owned();
         TemplateApp {
             config,
-            data: Default::default(),
+            data: None,
             incremental_progress_display: true,
             render_command_tx,
             render_result_rx,
@@ -69,82 +124,72 @@ impl TemplateApp {
     }
 
     fn store_pixel_line(&mut self, line_num: usize, line_pixels: Vec<RGB8>) {
-        assert_eq!(line_pixels.len(), self.config.image_width);
-        assert!(self.data.last_render_lines_received < self.data.last_render_height);
-        self.data.last_render_lines_received += 1;
+        let data = self
+            .data
+            .as_mut()
+            .expect("data must be present if storing pixel line");
 
-        // let mut image_buffer =
-        //     vec![RGB8 { r: 0, g: 0, b: 0 }; self.config.image_pixel_count()];
+        assert_eq!(line_pixels.len(), data.last_render_width);
+        assert!(data.last_render_lines_received < data.last_render_height);
+        data.last_render_lines_received += 1;
+        data.lines_received_since_last_terminal_render
+            .push(line_num);
 
         // update the image buffer
         let line_num = self.config.image_height - line_num - 1;
         let offset_start = line_num as usize * self.config.image_width;
         let offset_end = offset_start + self.config.image_width;
-        self.data.last_render_pixels[offset_start..offset_end]
-            .copy_from_slice(line_pixels.as_slice());
+        data.last_render_pixels[offset_start..offset_end].copy_from_slice(line_pixels.as_slice());
 
-        // //terminal progress indicator state
-        // let progress_indicator_width = 100i32;
-        // let progress_indicator_height =
-        //     (progress_indicator_width as f64 / self.config.aspect_ratio / 2.0) as i32;
-        // let width_incr = self.config.image_width as i32 / progress_indicator_width;
-        // let height_incr = self.config.image_height as i32 / progress_indicator_height;
-        // let mut progress_lines_written = 0;
+        if data.complete() {}
+    }
 
-        // // render the terminal progress indicator display
-        // // we only want to update the terminal render-in-progress display if the line we just
-        // // received is actually going to change the display
-        // if self.incremental_progress_display && line_num as i32 % height_incr == 0 {
-        //     if progress_lines_written > 0 {
-        //         print!("{}", termion::cursor::Up(progress_lines_written));
-        //         progress_lines_written = 0;
-        //     }
-        //     for j in 0..(self.config.image_height) {
-        //         let showing_progress_for_this_line = j % height_incr as usize == 0;
-        //         for i in 0..(self.config.image_width) {
-        //             if showing_progress_for_this_line && i % width_incr as usize == 0 {
-        //                 let c = rgb8_as_terminal_char(
-        //                     image_buffer[j * self.config.image_width + i],
-        //                 );
-        //                 print!("{}", c);
-        //             }
-        //         }
-        //         if showing_progress_for_this_line {
-        //             println!();
-        //             progress_lines_written += 1;
-        //         }
-        //     }
-        // }
+    fn render_terminal_progress_indicator(&mut self) {
+        let data = self.data.as_mut().unwrap();
 
-        if self.data.complete() {
-            // make sure we got all the data we should have
-            assert_eq!(
-                self.data.last_render_pixels.len(),
-                self.config.image_pixel_count()
-            );
+        let progress_indicator_width = 100i32;
+        let progress_indicator_height =
+            (progress_indicator_width as f64 / self.config.aspect_ratio() / 2.0) as i32;
+        let width_incr = data.last_render_width as i32 / progress_indicator_width;
+        let height_incr = data.last_render_height as i32 / progress_indicator_height;
 
-            println!(
-                "Saving completed image to disk at {} in PNG format...",
-                self.config.output_filename
-            );
-            lodepng::encode_file(
-                &self.config.output_filename,
-                &self.data.last_render_pixels,
-                self.config.image_width,
-                self.config.image_height,
-                lodepng::ColorType::RGB,
-                8,
-            )
-            .expect("Encoding result and saving to disk failed");
+        // We only render some rows and columns of pixels, and terminals can be slow, so
+        // we only want to update the terminal render-in-progress display if the lines we've
+        // received since last render would actually change the displayed output.
+        let should_rerender = self.incremental_progress_display
+            && false // TODO this is currently broken - remove this line and fix the bug
+            && data
+                .lines_received_since_last_terminal_render
+                .iter()
+                .any(|line_num| line_num % height_incr as usize == 0);
+        if should_rerender {
+            if data.terminal_initial_render_done {
+                print!("{}", termion::cursor::Up(data.last_render_height as u16));
+            }
+            for j in 0..(data.last_render_height) {
+                let showing_progress_for_this_line = j % height_incr as usize == 0;
+                if showing_progress_for_this_line {
+                    for i in 0..(data.last_render_width) {
+                        if i % width_incr as usize == 0 {
+                            let c = rgb8_as_terminal_char(
+                                data.last_render_pixels[j * data.last_render_width + i],
+                            );
+                            print!("{}", c);
+                        }
+                    }
+                    println!();
+                }
+            }
 
-            println!("Done saving.");
+            data.lines_received_since_last_terminal_render.clear();
+            data.terminal_initial_render_done = true;
         }
     }
 }
 
 impl epi::App for TemplateApp {
     fn name(&self) -> &str {
-        "All Seeing Crab"
+        "The All Seeing Crab"
     }
 
     /// Called once before the first frame.
@@ -176,38 +221,26 @@ impl epi::App for TemplateApp {
                     image_height,
                     image_width,
                 }) => {
-                    self.data.last_render_width = image_width;
-                    self.data.last_render_height = image_height;
-                    self.data.last_render_pixels =
-                        vec![RGB8 { r: 0, g: 0, b: 0 }; self.config.image_pixel_count()];
-                    self.data.last_render_lines_received = 0;
-
-                    if let Some(existing_tex) = self.data.last_render_tex {
-                        frame.tex_allocator().free(existing_tex);
-                        self.data.last_render_tex = None;
-                    }
+                    self.data
+                        .as_mut()
+                        .map(|d| d.clear_texture(frame.tex_allocator()));
+                    self.data = Some(UiData::new(image_width, image_height));
                 }
                 Ok(RenderResult::ImageLine {
                     line_num,
                     line_pixels,
                 }) => {
                     self.store_pixel_line(line_num, line_pixels);
+                    self.render_terminal_progress_indicator();
 
-                    // update the texture that gets displayed in the UI
-                    if let Some(existing_tex) = self.data.last_render_tex {
-                        frame.tex_allocator().free(existing_tex);
-                    }
-                    let tex_pixels = self
+                    let data = self
                         .data
-                        .last_render_pixels
-                        .iter()
-                        .map(|rgb| egui::Color32::from_rgba_premultiplied(rgb.r, rgb.g, rgb.b, 255))
-                        .collect::<Vec<_>>();
-                    self.data.last_render_tex = Some(
-                        frame
-                            .tex_allocator()
-                            .alloc_srgba_premultiplied((400, 225), &tex_pixels),
-                    );
+                        .as_mut()
+                        .expect("ui data must be present after storing pixels");
+                    if data.complete() {
+                        data.save_output_to_file(self.config.output_filename.as_ref());
+                    }
+                    data.rebuild_texture(frame.tex_allocator());
                 }
                 Err(flume::TryRecvError::Empty) => break,
                 Err(flume::TryRecvError::Disconnected) => {
@@ -230,15 +263,21 @@ impl epi::App for TemplateApp {
         egui::SidePanel::left("config_panel").show(ctx, |ui| {
             ui.heading("Config");
 
+            ui.add(egui::Slider::new(&mut self.config.image_width, 1..=1000).text("Image width"));
+            ui.add(egui::Slider::new(&mut self.config.image_height, 1..=500).text("Image height"));
+
+            ui.add(
+                egui::Slider::new(&mut self.config.samples_per_pixel, 1..=200)
+                    .text("Samples per pixel"),
+            );
+
+            ui.checkbox(&mut self.config.generate_random_scene, "Random scene");
+
             ui.horizontal(|ui| {
                 ui.label("Output filename: ");
                 ui.text_edit_singleline(&mut self.config.output_filename);
             });
 
-            ui.add(
-                egui::Slider::new(&mut self.config.samples_per_pixel, 0..=200)
-                    .text("Samples per pixel"),
-            );
             if ui.button("Render").clicked() {
                 self.trigger_render();
             }
@@ -247,12 +286,17 @@ impl epi::App for TemplateApp {
 
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("Ray tracing result");
-            let sizing = egui::Vec2::new(400 as f32, 225 as f32);
-            if let Some(tex_id) = self.data.last_render_tex {
-                ui.image(tex_id, sizing);
-            }
-            if !self.data.complete() {
-                ui.add(egui::ProgressBar::new(self.data.percent_complete()).animate(true));
+            if let Some(ref data) = self.data {
+                let sizing = egui::Vec2::new(
+                    data.last_render_width as f32,
+                    data.last_render_height as f32,
+                );
+                if let Some(tex_id) = data.last_render_tex {
+                    ui.image(tex_id, sizing);
+                }
+                if !data.complete() {
+                    ui.add(egui::ProgressBar::new(data.percent_complete()).animate(true));
+                }
             }
         });
     }
