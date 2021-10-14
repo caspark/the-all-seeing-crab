@@ -24,23 +24,69 @@ use rgb::RGB8;
 use vec3::{lerp, Color, Point3};
 
 use crate::{
-    camera::Camera,
-    color::{color_as_rgb8, rgb8_as_terminal_char},
-    material::DiffuseLambertian,
-    sphere::Sphere,
-    vec3::Vec3,
+    camera::Camera, color::color_as_rgb8, material::DiffuseLambertian, sphere::Sphere, vec3::Vec3,
 };
 
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(default)] // if we add new fields, give them default values when deserializing old state
+struct RenderConfig {
+    aspect_ratio: f64,
+    image_width: usize,
+    image_height: usize,
+    samples_per_pixel: u32,
+    render_mode: RayColorMode,
+    generate_random_scene: bool,
+
+    output_filename: String,
+}
+
+impl RenderConfig {
+    pub(crate) fn image_pixel_count(&self) -> usize {
+        self.image_width * self.image_height
+    }
+}
+
+impl Default for RenderConfig {
+    fn default() -> Self {
+        let aspect_ratio = 16.0 / 9.0;
+        let image_width = 400;
+        Self {
+            aspect_ratio,
+            image_width,
+            image_height: (image_width as f64 / aspect_ratio) as usize,
+            samples_per_pixel: 100,
+            render_mode: {
+                // RayColorMode::BlockColor {
+                //     color: Color::new(255.0, 0.0, 0.0),
+                // }
+                // RayColorMode::ShadeNormal
+                // RayColorMode::Depth { max_t: 1.0 }
+                RayColorMode::Material { depth: 50 }
+            },
+
+            generate_random_scene: true,
+            output_filename: "target/output.png".to_owned(),
+        }
+    }
+}
+
 enum RenderCommand {
-    Render,
+    Render { config: RenderConfig },
 }
 
 enum RenderResult {
-    Image { data: Vec<RGB8> },
+    Reset {
+        image_width: usize,
+        image_height: usize,
+    },
+    ImageLine {
+        line_num: usize,
+        line_pixels: Vec<RGB8>,
+    },
 }
 
 #[allow(dead_code)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 enum RayColorMode {
     /// shade as single purely matte color
     BlockColor { color: Color },
@@ -96,12 +142,17 @@ fn run(image_filename: &str) {
     let (command_tx, command_rx) = flume::unbounded::<RenderCommand>();
     let (result_tx, result_rx) = flume::unbounded::<RenderResult>();
 
-    let filename = image_filename.to_owned();
     let render_thread = std::thread::spawn(move || {
-        render_and_save_image(&filename, command_rx, result_tx);
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(16)
+            .build()
+            .expect("should be able to build threadpool")
+            .install(|| {
+                run_render_loop(command_rx, result_tx);
+            });
     });
 
-    let app = ui::TemplateApp::new(command_tx, result_rx);
+    let app = ui::TemplateApp::new(image_filename, command_tx, result_rx);
     let native_options = eframe::NativeOptions::default();
     eframe::run_native(Box::new(app), native_options);
     render_thread.join().unwrap();
@@ -216,51 +267,40 @@ fn create_random_scene() -> BvhNode {
     BvhNode::new(world, 0.0, 1.0)
 }
 
-fn render_and_save_image(
-    image_filename: &str,
+fn run_render_loop(
     render_command_rx: flume::Receiver<RenderCommand>,
     render_result_tx: flume::Sender<RenderResult>,
 ) {
-    // scene
-    let generate_random_scene = false;
+    loop {
+        match render_command_rx.recv() {
+            Err(flume::RecvError::Disconnected) => break, // nothing to do, just quit quietly
 
-    // image & rendering
-    let aspect_ratio: f64 = 16.0 / 9.0;
-    let image_width: i32 = 400;
-    let image_height: i32 = (image_width as f64 / aspect_ratio) as i32;
-    let image_pixel_count = (image_width * image_height) as usize;
-    let samples_per_pixel = 100;
-    let max_depth = 50;
-    let render_mode: RayColorMode = {
-        // RayColorMode::BlockColor {
-        //     color: Color::new(255.0, 0.0, 0.0),
-        // }
-        // RayColorMode::ShadeNormal
-        // RayColorMode::Depth { max_t: 1.0 }
-        RayColorMode::Material { depth: max_depth }
-    };
-    let render_threads = 16;
-    let render_delay = std::time::Duration::from_millis(0);
-    let incremental_progress_display = true;
-    println!(
-        "Image is {width}x{height} (total {count} pixels), with {samples} samples per pixel & max depth of {depth}",
-        width = image_width,
-        height = image_height,
-        count = image_pixel_count,
-        samples = samples_per_pixel,
-        depth = max_depth,
-    );
+            Ok(RenderCommand::Render { config }) => {
+                render_result_tx
+                    .send(RenderResult::Reset {
+                        image_height: config.image_height,
+                        image_width: config.image_width,
+                    })
+                    .ok()
+                    .expect("sending Reset should succeed");
 
+                render_image(config, &render_result_tx);
+            }
+        }
+    }
+}
+
+fn render_image(config: RenderConfig, render_result_tx: &flume::Sender<RenderResult>) {
     // camera
     let cam = {
-        let (look_from, look_at) = if generate_random_scene {
+        let (look_from, look_at) = if config.generate_random_scene {
             (Point3::new(13.0, 2.0, 3.0), Point3::new(0.0, 0.0, 0.0))
         } else {
             (Point3::new(3.0, 3.0, 2.0), Point3::new(0.0, 0.0, -1.0))
         };
         let vup = Vec3::new(0.0, 1.0, 0.0);
         let vfov = 20.0;
-        let (focus_dist, aperture) = if generate_random_scene {
+        let (focus_dist, aperture) = if config.generate_random_scene {
             (10.0, 0.1)
         } else {
             ((look_from - look_at).length(), 1.0)
@@ -270,7 +310,7 @@ fn render_and_save_image(
             look_at,
             vup,
             vfov,
-            aspect_ratio,
+            config.aspect_ratio,
             aperture,
             focus_dist,
             0.0,
@@ -278,127 +318,39 @@ fn render_and_save_image(
         )
     };
 
-    let world = if generate_random_scene {
+    let world = if config.generate_random_scene {
         create_random_scene()
     } else {
         create_fixed_scene()
     };
 
-    type RenderLine = (i32, Vec<RGB8>);
-    let (tx, rx) = flume::unbounded::<RenderLine>();
-
-    let render_image_fn = || loop {
-        match render_command_rx.recv() {
-            Ok(RenderCommand::Render) => {
-                println!("Rendering w/ {} threads...", render_threads);
-
-                (0..image_height)
-                    .rev()
-                    .collect::<Vec<_>>()
-                    .into_par_iter()
-                    .for_each(|j| {
-                        let mut line_pixels = Vec::with_capacity(image_width as usize);
-                        for i in 0..image_width {
-                            let mut pixel_color: Color = Color::zero();
-                            for _ in 0..samples_per_pixel {
-                                let u = (i as f64 + util::random_double_unit())
-                                    / (image_width as f64 - 1.0);
-                                let v = (j as f64 + util::random_double_unit())
-                                    / (image_height as f64 - 1.0);
-                                let r = cam.get_ray(u, v);
-                                pixel_color += ray_color(r, &world, render_mode);
-                            }
-
-                            let rgb8 = color_as_rgb8(pixel_color, samples_per_pixel);
-                            line_pixels.push(rgb8);
-                        }
-
-                        tx.send((j, line_pixels)).unwrap();
-                    });
-            }
-            Err(flume::RecvError::Disconnected) => break, // nothing to do, just quit quietly
-        }
-    };
-
-    let output_image_fn = || {
-        let mut image_buffer = vec![RGB8 { r: 0, g: 0, b: 0 }; image_pixel_count];
-        {
-            let progress_indicator_width = 100i32;
-            let progress_indicator_height =
-                (progress_indicator_width as f64 / aspect_ratio / 2.0) as i32;
-            let width_incr = image_width / progress_indicator_width;
-            let height_incr = image_height / progress_indicator_height;
-
-            let mut progress_lines_written = 0;
-
-            for _ in 0..image_height {
-                let (line_num, pixels) = rx.recv().unwrap();
-                let line_num = image_height - line_num - 1;
-                assert_eq!(pixels.len(), image_width as usize);
-
-                let offset_start = line_num as usize * image_width as usize;
-                let offset_end = offset_start + image_width as usize;
-                image_buffer[offset_start..offset_end].copy_from_slice(pixels.as_slice());
-
-                // we only want to update the terminal render-in-progress display if the line we just
-                // received is actually going to change the display
-                if incremental_progress_display && line_num % height_incr == 0 {
-                    if progress_lines_written > 0 {
-                        print!("{}", termion::cursor::Up(progress_lines_written));
-                        progress_lines_written = 0;
-                    }
-                    for j in 0..(image_height as usize) {
-                        let showing_progress_for_this_line = j % height_incr as usize == 0;
-                        for i in 0..(image_width as usize) {
-                            if showing_progress_for_this_line && i % width_incr as usize == 0 {
-                                let c = rgb8_as_terminal_char(
-                                    image_buffer[j * image_width as usize + i],
-                                );
-                                print!("{}", c);
-                            }
-                        }
-                        if showing_progress_for_this_line {
-                            println!();
-                            progress_lines_written += 1;
-                        }
-                    }
-
-                    if render_delay.as_millis() > 0 {
-                        std::thread::sleep(render_delay);
-                    }
+    (0..config.image_height)
+        .rev()
+        .collect::<Vec<_>>()
+        .into_par_iter()
+        .for_each(|j| {
+            let mut line_pixels = Vec::with_capacity(config.image_width as usize);
+            for i in 0..config.image_width {
+                let mut pixel_color: Color = Color::zero();
+                for _ in 0..config.samples_per_pixel {
+                    let u =
+                        (i as f64 + util::random_double_unit()) / (config.image_width as f64 - 1.0);
+                    let v = (j as f64 + util::random_double_unit())
+                        / (config.image_height as f64 - 1.0);
+                    let r = cam.get_ray(u, v);
+                    pixel_color += ray_color(r, &world, config.render_mode);
                 }
+
+                let rgb8 = color_as_rgb8(pixel_color, config.samples_per_pixel);
+                line_pixels.push(rgb8);
             }
-            assert_eq!(image_buffer.len(), image_pixel_count);
-        }
 
-        render_result_tx
-            .send(RenderResult::Image {
-                data: image_buffer.clone(),
-            })
-            .ok()
-            .expect("UI should still be running when render result is sent to it");
-
-        println!(
-            "Saving resulting image to disk at {} in PNG format...",
-            image_filename
-        );
-        lodepng::encode_file(
-            image_filename,
-            &image_buffer,
-            image_width as usize,
-            image_height as usize,
-            lodepng::ColorType::RGB,
-            8,
-        )
-        .expect("Encoding result and saving to disk failed");
-
-        println!("Done saving.");
-    };
-
-    let threadpool = rayon::ThreadPoolBuilder::new()
-        // thread count has 1 added for the thread used to collect & display the results
-        .num_threads(render_threads + 1)
-        .build()
-        .unwrap();
-    threadpool.join(render_image_fn, output_image_fn);
+            render_result_tx
+                .send(RenderResult::ImageLine {
+                    line_num: j,
+                    line_pixels: line_pixels,
+                })
+                .ok()
+                .unwrap();
+        });
 }

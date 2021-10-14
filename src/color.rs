@@ -2,7 +2,7 @@ use rgb::{ComponentMap, RGB8};
 
 use crate::vec3::Color;
 
-pub(crate) fn color_as_rgb8(pixel_color: Color, samples_per_pixel: i32) -> RGB8 {
+pub(crate) fn color_as_rgb8(pixel_color: Color, samples_per_pixel: u32) -> RGB8 {
     let mut r = pixel_color.x;
     let mut g = pixel_color.y;
     let mut b = pixel_color.z;

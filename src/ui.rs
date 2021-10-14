@@ -4,37 +4,22 @@ use eframe::{
 };
 use rgb::RGB8;
 
-use crate::{RenderCommand, RenderResult};
-
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-#[serde(default)] // if we add new fields, give them default values when deserializing old state
-struct UiSettings {
-    label: String,
-
-    #[serde(skip)]
-    value: f32,
-}
-
-impl Default for UiSettings {
-    fn default() -> Self {
-        Self {
-            // Example stuff:
-            label: "Hello World!".to_owned(),
-            value: 2.7,
-        }
-    }
-}
+use crate::{color::rgb8_as_terminal_char, RenderCommand, RenderConfig, RenderResult};
 
 #[derive(Debug, Default)]
 struct UiData {
-    last_render_result: Option<Vec<RGB8>>,
+    last_render_width: usize,
+    last_render_height: usize,
+    last_render_lines_received: usize,
+    last_render_pixels: Vec<RGB8>,
     last_render_tex: Option<TextureId>,
 }
 
 #[derive(Debug)]
 pub struct TemplateApp {
-    settings: UiSettings,
+    config: RenderConfig,
     data: UiData,
+    incremental_progress_display: bool,
 
     render_command_tx: flume::Sender<RenderCommand>,
     render_result_rx: flume::Receiver<RenderResult>,
@@ -42,15 +27,35 @@ pub struct TemplateApp {
 
 impl TemplateApp {
     pub(crate) fn new(
+        output_filename: &str,
         render_command_tx: flume::Sender<RenderCommand>,
         render_result_rx: flume::Receiver<RenderResult>,
     ) -> Self {
+        let mut config = RenderConfig::default();
+        config.output_filename = output_filename.to_owned();
         TemplateApp {
-            settings: Default::default(),
+            config,
             data: Default::default(),
+            incremental_progress_display: true,
             render_command_tx,
             render_result_rx,
         }
+    }
+
+    pub(crate) fn trigger_render(&self) {
+        println!(
+            "Triggering render of {width}x{height} image (total {count} pixels), with {samples} samples per pixel",
+            width =self. config.image_width,
+            height =self. config.image_height,
+            count = self.config.image_pixel_count(),
+            samples =self. config.samples_per_pixel,
+        );
+        self.render_command_tx
+            .send(RenderCommand::Render {
+                config: self.config.clone(),
+            })
+            .ok()
+            .expect("render command send should succeed");
     }
 }
 
@@ -68,53 +73,138 @@ impl epi::App for TemplateApp {
     ) {
         // Load previous app state (if any).
         if let Some(storage) = _storage {
-            self.settings = epi::get_value(storage, epi::APP_KEY).unwrap_or_default()
+            self.config = epi::get_value(storage, epi::APP_KEY).unwrap_or_default()
         }
 
-        self.render_command_tx
-            .send(RenderCommand::Render)
-            .ok()
-            .expect("initial render command send should succeed");
+        self.trigger_render();
     }
 
     /// Called by the frame work to save state before shutdown.
     fn save(&mut self, storage: &mut dyn epi::Storage) {
-        epi::set_value(storage, epi::APP_KEY, &self.settings);
+        epi::set_value(storage, epi::APP_KEY, &self.config);
     }
 
     /// Called each time the UI needs repainting, which may be many times per second.
     /// Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
     fn update(&mut self, ctx: &egui::CtxRef, frame: &mut epi::Frame<'_>) {
+        //TODO should pump this channel repeatedly until it's empty
         match self.render_result_rx.try_recv() {
-            Ok(RenderResult::Image { data }) => {
-                let pixels = data
-                    .iter()
-                    .map(|rgb| egui::Color32::from_rgba_premultiplied(rgb.r, rgb.g, rgb.b, 255))
-                    .collect::<Vec<_>>();
-
-                // let pixels: Vec<_> = (0..(width * height))
-                //     .into_iter()
-                //     .map(|_| {
-                //         egui::Color32::from_rgba_premultiplied(
-                //             rand::random(),
-                //             rand::random(),
-                //             rand::random(),
-                //             255,
-                //         )
-                //     })
-                //     .collect();
+            Ok(RenderResult::Reset {
+                image_height,
+                image_width,
+            }) => {
+                self.data.last_render_width = image_width;
+                self.data.last_render_height = image_height;
+                self.data.last_render_pixels =
+                    vec![RGB8 { r: 0, g: 0, b: 0 }; self.config.image_pixel_count()];
+                self.data.last_render_lines_received = 0;
 
                 if let Some(existing_tex) = self.data.last_render_tex {
                     frame.tex_allocator().free(existing_tex);
+                    self.data.last_render_tex = None;
+                }
+            }
+            Ok(RenderResult::ImageLine {
+                line_num,
+                line_pixels,
+            }) => {
+                println!("We got an image line {}", line_num);
+
+                assert_eq!(line_pixels.len(), self.config.image_width);
+                assert!(self.data.last_render_lines_received < self.data.last_render_height);
+                self.data.last_render_lines_received += 1;
+
+                // let mut image_buffer =
+                //     vec![RGB8 { r: 0, g: 0, b: 0 }; self.config.image_pixel_count()];
+
+                // update the image buffer
+                let line_num = self.config.image_height - line_num - 1;
+                let offset_start = line_num as usize * self.config.image_width;
+                let offset_end = offset_start + self.config.image_width;
+                self.data.last_render_pixels[offset_start..offset_end]
+                    .copy_from_slice(line_pixels.as_slice());
+
+                // //terminal progress indicator state
+                // let progress_indicator_width = 100i32;
+                // let progress_indicator_height =
+                //     (progress_indicator_width as f64 / self.config.aspect_ratio / 2.0) as i32;
+                // let width_incr = self.config.image_width as i32 / progress_indicator_width;
+                // let height_incr = self.config.image_height as i32 / progress_indicator_height;
+                // let mut progress_lines_written = 0;
+
+                // // render the terminal progress indicator display
+                // // we only want to update the terminal render-in-progress display if the line we just
+                // // received is actually going to change the display
+                // if self.incremental_progress_display && line_num as i32 % height_incr == 0 {
+                //     if progress_lines_written > 0 {
+                //         print!("{}", termion::cursor::Up(progress_lines_written));
+                //         progress_lines_written = 0;
+                //     }
+                //     for j in 0..(self.config.image_height) {
+                //         let showing_progress_for_this_line = j % height_incr as usize == 0;
+                //         for i in 0..(self.config.image_width) {
+                //             if showing_progress_for_this_line && i % width_incr as usize == 0 {
+                //                 let c = rgb8_as_terminal_char(
+                //                     image_buffer[j * self.config.image_width + i],
+                //                 );
+                //                 print!("{}", c);
+                //             }
+                //         }
+                //         if showing_progress_for_this_line {
+                //             println!();
+                //             progress_lines_written += 1;
+                //         }
+                //     }
+                // }
+
+                if self.data.last_render_lines_received == self.data.last_render_height {
+                    // make sure we got all the data we should have
+                    assert_eq!(
+                        self.data.last_render_pixels.len(),
+                        self.config.image_pixel_count()
+                    );
+
+                    println!(
+                        "Saving completed image to disk at {} in PNG format...",
+                        self.config.output_filename
+                    );
+                    lodepng::encode_file(
+                        &self.config.output_filename,
+                        &self.data.last_render_pixels,
+                        self.config.image_width,
+                        self.config.image_height,
+                        lodepng::ColorType::RGB,
+                        8,
+                    )
+                    .expect("Encoding result and saving to disk failed");
+
+                    println!("Done saving.");
                 }
 
-                self.data.last_render_tex = Some(
-                    frame
-                        .tex_allocator()
-                        .alloc_srgba_premultiplied((400, 225), &pixels),
-                );
+                // let pixels = data
+                //     .iter()
+                //     .map(|rgb| egui::Color32::from_rgba_premultiplied(rgb.r, rgb.g, rgb.b, 255))
+                //     .collect::<Vec<_>>();
 
-                self.data.last_render_result = Some(data);
+                // // let pixels: Vec<_> = (0..(width * height))
+                // //     .into_iter()
+                // //     .map(|_| {
+                // //         egui::Color32::from_rgba_premultiplied(
+                // //             rand::random(),
+                // //             rand::random(),
+                // //             rand::random(),
+                // //             255,
+                // //         )
+                // //     })
+                // //     .collect();
+
+                // self.data.last_render_tex = Some(
+                //     frame
+                //         .tex_allocator()
+                //         .alloc_srgba_premultiplied((400, 225), &pixels),
+                // );
+
+                // self.data.last_render_result = Some(data);
             }
             Err(flume::TryRecvError::Empty) => (),
             Err(flume::TryRecvError::Disconnected) => {
@@ -142,38 +232,30 @@ impl epi::App for TemplateApp {
             ui.heading("Side Panel");
 
             ui.horizontal(|ui| {
-                ui.label("Write something: ");
-                ui.text_edit_singleline(&mut self.settings.label);
+                ui.label("Output filename: ");
+                ui.text_edit_singleline(&mut self.config.output_filename);
             });
 
-            ui.add(egui::Slider::new(&mut self.settings.value, 0.0..=10.0).text("value"));
-            if ui.button("Increment").clicked() {
-                self.settings.value += 1.0;
+            ui.add(
+                egui::Slider::new(&mut self.config.samples_per_pixel, 0..=200)
+                    .text("Samples per pixel"),
+            );
+            if ui.button("Render").clicked() {
+                self.trigger_render();
             }
-
-            ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
-                ui.add(
-                    egui::Hyperlink::new("https://github.com/emilk/egui/").text("powered by egui"),
-                );
-            });
+            egui::warn_if_debug_build(ui);
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
             // The central panel the region left after adding TopPanel's and SidePanel's
 
-            ui.heading("egui template");
-            ui.hyperlink("https://github.com/emilk/egui_template");
-            ui.add(egui::github_link_file!(
-                "https://github.com/emilk/egui_template/blob/master/",
-                "Source code."
-            ));
-            egui::warn_if_debug_build(ui);
-
+            ui.heading("Ray tracing result");
             let sizing = egui::Vec2::new(400 as f32, 225 as f32);
             match self.data.last_render_tex {
                 Some(tex) => {
-                    ui.heading("image goes here");
+                    ui.heading("image goes below");
                     ui.image(tex, sizing);
+                    if self.data.last_render_lines_received == self.data.last_render_height {}
                     ui.heading("image should be above");
                 }
                 None => {
