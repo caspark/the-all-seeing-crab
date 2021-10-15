@@ -1,5 +1,5 @@
 pub(crate) fn random_int(min: i32, max: i32) -> i32 {
-    min + (max - min) * rand::random::<i32>()
+    min + (max - min).wrapping_mul(rand::random::<i32>())
 }
 
 pub(crate) fn random_double(min: f64, max: f64) -> f64 {
