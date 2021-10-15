@@ -146,7 +146,9 @@ fn run(image_filename: &str) {
     let (command_tx, command_rx) = flume::unbounded::<RenderCommand>();
     let (result_tx, result_rx) = flume::unbounded::<RenderResult>();
 
-    let render_thread = std::thread::spawn(move || {
+    // start a background thread to handle rendering, but drop its handle so we don't wait for it
+    // to finish
+    drop(std::thread::spawn(move || {
         rayon::ThreadPoolBuilder::new()
             .num_threads(16)
             .build()
@@ -154,12 +156,11 @@ fn run(image_filename: &str) {
             .install(|| {
                 run_render_loop(command_rx, result_tx);
             });
-    });
+    }));
 
     let app = ui::TemplateApp::new(image_filename, command_tx, result_rx);
     let native_options = eframe::NativeOptions::default();
     eframe::run_native(Box::new(app), native_options);
-    render_thread.join().unwrap();
 }
 
 fn print_usage_then_die(exe: &str, error: &str) {
@@ -328,7 +329,6 @@ fn render_image(config: RenderConfig, render_result_tx: &flume::Sender<RenderRes
         create_fixed_scene()
     };
 
-    //TODO quitting the UI while this is running causes a bunch of panics
     //TODO this can't be interrupted with a new render yet - add "interrupt" and "queue" functionality
     (0..config.image_height)
         .rev()
