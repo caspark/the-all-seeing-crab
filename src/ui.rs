@@ -28,7 +28,7 @@ impl UiData {
     }
 
     fn aspect_ratio(&self) -> f64 {
-        (self.last_render_width * self.last_render_height) as f64
+        self.last_render_width as f64 / self.last_render_height as f64
     }
 
     fn rebuild_texture(&mut self, tex_allocator: &mut dyn eframe::epi::TextureAllocator) {

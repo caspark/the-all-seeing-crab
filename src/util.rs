@@ -1,5 +1,6 @@
 pub(crate) fn random_int(min: i32, max: i32) -> i32 {
-    min + (max - min).wrapping_mul(rand::random::<i32>())
+    // +1 because the max is inclusive!
+    min + ((max + 1 - min) as f64 * rand::random::<f64>()) as i32
 }
 
 pub(crate) fn random_double(min: f64, max: f64) -> f64 {
