@@ -40,8 +40,10 @@ impl UiData {
             .iter()
             .map(|rgb| egui::Color32::from_rgba_premultiplied(rgb.r, rgb.g, rgb.b, 255))
             .collect::<Vec<_>>();
-        self.last_render_tex =
-            Some(tex_allocator.alloc_srgba_premultiplied((400, 225), &tex_pixels));
+        self.last_render_tex = Some(tex_allocator.alloc_srgba_premultiplied(
+            (self.last_render_width, self.last_render_height),
+            &tex_pixels,
+        ));
     }
 
     fn clear_texture(&mut self, tex_allocator: &mut dyn eframe::epi::TextureAllocator) {

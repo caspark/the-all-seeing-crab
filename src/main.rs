@@ -30,9 +30,7 @@ use crate::{
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 struct RenderConfig {
-    #[serde(skip)] //TODO changing image width and height doesn't work properly yet
     image_width: usize,
-    #[serde(skip)] //TODO changing image width and height doesn't work properly yet
     image_height: usize,
     samples_per_pixel: u32,
     #[serde(skip)]
