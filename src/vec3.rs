@@ -9,6 +9,8 @@ use crate::util::{random_double, random_double_unit};
     Default,
     Copy,
     Clone,
+    serde::Serialize,
+    serde::Deserialize,
     PartialEq,
     Constructor,
     Add,
