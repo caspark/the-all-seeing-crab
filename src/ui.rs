@@ -27,6 +27,10 @@ impl UiData {
         d
     }
 
+    fn aspect_ratio(&self) -> f64 {
+        (self.last_render_width * self.last_render_height) as f64
+    }
+
     fn rebuild_texture(&mut self, tex_allocator: &mut dyn eframe::epi::TextureAllocator) {
         if let Some(existing_tex) = self.last_render_tex {
             tex_allocator.free(existing_tex);
@@ -44,6 +48,58 @@ impl UiData {
         if let Some(existing_tex) = self.last_render_tex {
             tex_allocator.free(existing_tex);
             self.last_render_tex = None;
+        }
+    }
+
+    fn store_pixel_line(&mut self, line_num: usize, line_pixels: Vec<RGB8>) {
+        assert_eq!(line_pixels.len(), self.last_render_width);
+        assert!(self.last_render_lines_received < self.last_render_height);
+        self.last_render_lines_received += 1;
+        self.lines_received_since_last_terminal_render
+            .push(line_num);
+
+        // update the image buffer
+        let line_num = self.last_render_height - line_num - 1;
+        let offset_start = line_num as usize * self.last_render_width;
+        let offset_end = offset_start + self.last_render_width;
+        self.last_render_pixels[offset_start..offset_end].copy_from_slice(line_pixels.as_slice());
+    }
+
+    fn render_terminal_progress_indicator(&mut self) {
+        let progress_indicator_width = 100i32;
+        let progress_indicator_height =
+            (progress_indicator_width as f64 / self.aspect_ratio() / 2.0) as i32;
+        let width_incr = self.last_render_width as i32 / progress_indicator_width;
+        let height_incr = self.last_render_height as i32 / progress_indicator_height;
+
+        // We only render some rows and columns of pixels, and terminals can be slow, so
+        // we only want to update the terminal render-in-progress display if the lines we've
+        // received since last render would actually change the displayed output.
+        let should_rerender = self
+            .lines_received_since_last_terminal_render
+            .iter()
+            .any(|line_num| line_num % height_incr as usize == 0);
+        if should_rerender {
+            if self.terminal_initial_render_done {
+                print!("{}", termion::cursor::Up(self.last_render_height as u16));
+            }
+            for j in 0..(self.last_render_height) {
+                let showing_progress_for_this_line = j % height_incr as usize == 0;
+                if showing_progress_for_this_line {
+                    for i in 0..(self.last_render_width) {
+                        if i % width_incr as usize == 0 {
+                            let c = rgb8_as_terminal_char(
+                                self.last_render_pixels[j * self.last_render_width + i],
+                            );
+                            print!("{}", c);
+                        }
+                    }
+                    println!();
+                }
+            }
+
+            self.lines_received_since_last_terminal_render.clear();
+            self.terminal_initial_render_done = true;
         }
     }
 
@@ -122,69 +178,6 @@ impl TemplateApp {
             .ok()
             .expect("render command send should succeed");
     }
-
-    fn store_pixel_line(&mut self, line_num: usize, line_pixels: Vec<RGB8>) {
-        let data = self
-            .data
-            .as_mut()
-            .expect("data must be present if storing pixel line");
-
-        assert_eq!(line_pixels.len(), data.last_render_width);
-        assert!(data.last_render_lines_received < data.last_render_height);
-        data.last_render_lines_received += 1;
-        data.lines_received_since_last_terminal_render
-            .push(line_num);
-
-        // update the image buffer
-        let line_num = self.config.image_height - line_num - 1;
-        let offset_start = line_num as usize * self.config.image_width;
-        let offset_end = offset_start + self.config.image_width;
-        data.last_render_pixels[offset_start..offset_end].copy_from_slice(line_pixels.as_slice());
-
-        if data.complete() {}
-    }
-
-    fn render_terminal_progress_indicator(&mut self) {
-        let data = self.data.as_mut().unwrap();
-
-        let progress_indicator_width = 100i32;
-        let progress_indicator_height =
-            (progress_indicator_width as f64 / self.config.aspect_ratio() / 2.0) as i32;
-        let width_incr = data.last_render_width as i32 / progress_indicator_width;
-        let height_incr = data.last_render_height as i32 / progress_indicator_height;
-
-        // We only render some rows and columns of pixels, and terminals can be slow, so
-        // we only want to update the terminal render-in-progress display if the lines we've
-        // received since last render would actually change the displayed output.
-        let should_rerender = self.incremental_progress_display
-            && false // TODO this is currently broken - remove this line and fix the bug
-            && data
-                .lines_received_since_last_terminal_render
-                .iter()
-                .any(|line_num| line_num % height_incr as usize == 0);
-        if should_rerender {
-            if data.terminal_initial_render_done {
-                print!("{}", termion::cursor::Up(data.last_render_height as u16));
-            }
-            for j in 0..(data.last_render_height) {
-                let showing_progress_for_this_line = j % height_incr as usize == 0;
-                if showing_progress_for_this_line {
-                    for i in 0..(data.last_render_width) {
-                        if i % width_incr as usize == 0 {
-                            let c = rgb8_as_terminal_char(
-                                data.last_render_pixels[j * data.last_render_width + i],
-                            );
-                            print!("{}", c);
-                        }
-                    }
-                    println!();
-                }
-            }
-
-            data.lines_received_since_last_terminal_render.clear();
-            data.terminal_initial_render_done = true;
-        }
-    }
 }
 
 impl epi::App for TemplateApp {
@@ -230,13 +223,17 @@ impl epi::App for TemplateApp {
                     line_num,
                     line_pixels,
                 }) => {
-                    self.store_pixel_line(line_num, line_pixels);
-                    self.render_terminal_progress_indicator();
-
                     let data = self
                         .data
                         .as_mut()
                         .expect("ui data must be present after storing pixels");
+
+                    data.store_pixel_line(line_num, line_pixels);
+                    if self.incremental_progress_display {
+                        //TODO fix below, currently it crashes
+                        // data.render_terminal_progress_indicator();
+                    }
+
                     if data.complete() {
                         data.save_output_to_file(self.config.output_filename.as_ref());
                     }
