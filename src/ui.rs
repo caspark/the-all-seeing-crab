@@ -6,7 +6,10 @@ use eframe::{
 };
 use rgb::RGB8;
 
-use crate::{color::rgb8_as_terminal_char, RenderCommand, RenderConfig, RenderResult};
+use crate::{
+    color::rgb8_as_terminal_char, vec3::Color, RayColorMode, RenderCommand, RenderConfig,
+    RenderResult,
+};
 
 #[derive(Debug, Default)]
 struct UiData {
@@ -299,6 +302,34 @@ impl epi::App for TemplateApp {
             );
 
             ui.checkbox(&mut self.config.generate_random_scene, "Random scene");
+
+            egui::ComboBox::from_label("Render mode")
+                .selected_text(format!("{:?}", self.config.render_mode))
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(
+                        &mut self.config.render_mode,
+                        RayColorMode::BlockColor {
+                            color: Color::new(255.0, 0.0, 0.0),
+                        },
+                        "Block Color",
+                    );
+                    ui.selectable_value(
+                        &mut self.config.render_mode,
+                        RayColorMode::Depth { max_t: 1.0 },
+                        "Depth",
+                    );
+                    ui.selectable_value(
+                        &mut self.config.render_mode,
+                        RayColorMode::ShadeNormal,
+                        "Normals",
+                    );
+                    ui.selectable_value(
+                        &mut self.config.render_mode,
+                        RayColorMode::Material { depth: 50 },
+                        "Material",
+                    );
+                });
+            ui.end_row();
 
             ui.horizontal(|ui| {
                 ui.label("Output filename: ");

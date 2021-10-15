@@ -33,7 +33,6 @@ struct RenderConfig {
     image_width: usize,
     image_height: usize,
     samples_per_pixel: u32,
-    #[serde(skip)]
     render_mode: RayColorMode,
     generate_random_scene: bool,
     output_filename: String,
@@ -87,8 +86,7 @@ enum RenderResult {
     },
 }
 
-#[allow(dead_code)]
-#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 enum RayColorMode {
     /// shade as single purely matte color
     BlockColor { color: Color },
