@@ -1,3 +1,5 @@
+use std::{io::Write, ops::Rem};
+
 use eframe::{
     egui::{self, TextureId},
     epi,
@@ -15,7 +17,6 @@ struct UiData {
     last_render_tex: Option<TextureId>,
 
     terminal_initial_render_done: bool,
-    lines_received_since_last_terminal_render: Vec<usize>,
 }
 
 impl UiData {
@@ -25,10 +26,6 @@ impl UiData {
         d.last_render_height = height;
         d.last_render_pixels = vec![RGB8 { r: 0, g: 0, b: 0 }; width * height];
         d
-    }
-
-    fn aspect_ratio(&self) -> f64 {
-        self.last_render_width as f64 / self.last_render_height as f64
     }
 
     fn rebuild_texture(&mut self, tex_allocator: &mut dyn eframe::epi::TextureAllocator) {
@@ -57,8 +54,6 @@ impl UiData {
         assert_eq!(line_pixels.len(), self.last_render_width);
         assert!(self.last_render_lines_received < self.last_render_height);
         self.last_render_lines_received += 1;
-        self.lines_received_since_last_terminal_render
-            .push(line_num);
 
         // update the image buffer
         let line_num = self.last_render_height - line_num - 1;
@@ -67,40 +62,50 @@ impl UiData {
         self.last_render_pixels[offset_start..offset_end].copy_from_slice(line_pixels.as_slice());
     }
 
-    fn render_terminal_progress_indicator(&mut self) {
-        let progress_indicator_width = 100i32;
-        let progress_indicator_height =
-            (progress_indicator_width as f64 / self.aspect_ratio() / 2.0) as i32;
-        let width_incr = self.last_render_width as i32 / progress_indicator_width;
-        let height_incr = self.last_render_height as i32 / progress_indicator_height;
+    fn render_terminal_progress_indicator(&mut self, settings: &TerminalSettings, line_num: usize) {
+        use std::fmt::Write; // needed to use write! with strings
 
-        // We only render some rows and columns of pixels, and terminals can be slow, so
-        // we only want to update the terminal render-in-progress display if the lines we've
-        // received since last render would actually change the displayed output.
-        let should_rerender = self
-            .lines_received_since_last_terminal_render
-            .iter()
-            .any(|line_num| line_num % height_incr as usize == 0);
+        let TerminalSettings {
+            desired_width,
+            desired_height,
+        } = *settings;
+
+        let height_ratio = self.last_render_height as f64 / desired_height as f64;
+        let width_ratio = self.last_render_width as f64 / desired_width as f64;
+
+        // Terminals are slow, so if we output every line to stdout then our app will end up blocking
+        // writing on stdout, which will cause the UI thread to hang. Therefore we only output a line
+        // if we know it will impact the resulting image.
+        // Essentially this weird looking maths is attempting to do the inverse of
+        // `(j as f64 * height_ratio) as usize;` - it is finding whether that will result in line_num
+        // for any j from 0 to the desired terminal output height.
+        // It was determined experimentally - if it breaks, it can be replaced with something like:
+        // (0..settings.desired_height).map(|j| (j as f64 * height_ratio) as usize).find(line_num).is_some();
+        let should_rerender =
+            (height_ratio * 0.99999999999 + line_num as f64 + 1.0).rem(height_ratio) < 1.0;
         if should_rerender {
+            // string sizing note: width + 1 char for newline on each line, plus an arbitrary 10 bytes
+            // for the "move cursor up" terminal escape code we might have
+            let mut output = String::with_capacity((desired_width + 1) * desired_height + 10);
+
             if self.terminal_initial_render_done {
-                print!("{}", termion::cursor::Up(self.last_render_height as u16));
+                write!(output, "{}", termion::cursor::Up(desired_height as u16)).unwrap();
             }
-            for j in 0..(self.last_render_height) {
-                let showing_progress_for_this_line = j % height_incr as usize == 0;
-                if showing_progress_for_this_line {
-                    for i in 0..(self.last_render_width) {
-                        if i % width_incr as usize == 0 {
-                            let c = rgb8_as_terminal_char(
-                                self.last_render_pixels[j * self.last_render_width + i],
-                            );
-                            print!("{}", c);
-                        }
-                    }
-                    println!();
+            for j in 0..desired_height {
+                let y = (j as f64 * height_ratio) as usize;
+                for i in 0..desired_width {
+                    let x = (i as f64 * width_ratio) as usize;
+                    let pixel = self.last_render_pixels[y * self.last_render_width + x];
+                    write!(output, "{}", rgb8_as_terminal_char(pixel)).unwrap();
                 }
+                writeln!(output).unwrap();
             }
 
-            self.lines_received_since_last_terminal_render.clear();
+            std::io::stdout()
+                .lock()
+                .write_all(output.as_bytes())
+                .unwrap();
+
             self.terminal_initial_render_done = true;
         }
     }
@@ -112,7 +117,7 @@ impl UiData {
             self.last_render_width * self.last_render_height
         );
 
-        println!(
+        print!(
             "Saving completed image to disk at {} in PNG format...",
             output_filename
         );
@@ -126,7 +131,7 @@ impl UiData {
         )
         .expect("Encoding result and saving to disk failed");
 
-        println!("Done saving.");
+        println!(" done saving.");
     }
 
     fn complete(&self) -> bool {
@@ -138,11 +143,27 @@ impl UiData {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+struct TerminalSettings {
+    desired_width: usize,
+    desired_height: usize,
+}
+
+impl Default for TerminalSettings {
+    fn default() -> Self {
+        Self {
+            desired_width: 80,
+            desired_height: 13,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct TemplateApp {
     config: RenderConfig,
     data: Option<UiData>,
-    incremental_progress_display: bool,
+
+    terminal_display: Option<TerminalSettings>,
 
     render_command_tx: flume::Sender<RenderCommand>,
     render_result_rx: flume::Receiver<RenderResult>,
@@ -159,7 +180,7 @@ impl TemplateApp {
         TemplateApp {
             config,
             data: None,
-            incremental_progress_display: true,
+            terminal_display: Some(TerminalSettings::default()),
             render_command_tx,
             render_result_rx,
         }
@@ -216,6 +237,9 @@ impl epi::App for TemplateApp {
                     image_height,
                     image_width,
                 }) => {
+                    assert!(image_width > 0);
+                    assert!(image_height > 0);
+
                     self.data
                         .as_mut()
                         .map(|d| d.clear_texture(frame.tex_allocator()));
@@ -228,12 +252,12 @@ impl epi::App for TemplateApp {
                     let data = self
                         .data
                         .as_mut()
-                        .expect("ui data must be present after storing pixels");
+                        .expect("ui data must be present for storing pixels");
 
                     data.store_pixel_line(line_num, line_pixels);
-                    if self.incremental_progress_display {
-                        //TODO fix below, currently it crashes
-                        // data.render_terminal_progress_indicator();
+
+                    if let Some(settings) = self.terminal_display {
+                        data.render_terminal_progress_indicator(&settings, line_num);
                     }
 
                     if data.complete() {
@@ -261,6 +285,10 @@ impl epi::App for TemplateApp {
 
         egui::SidePanel::left("config_panel").show(ctx, |ui| {
             ui.heading("Config");
+
+            if ui.button("Reset config").clicked() {
+                self.config = RenderConfig::default();
+            }
 
             ui.add(egui::Slider::new(&mut self.config.image_width, 1..=1000).text("Image width"));
             ui.add(egui::Slider::new(&mut self.config.image_height, 1..=500).text("Image height"));
