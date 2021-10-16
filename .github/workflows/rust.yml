@@ -12,15 +12,20 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-    - run: apt-get install libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libspeechd-dev libxkbcommon-dev libssl-dev
     - uses: actions/checkout@v2
-    - run: rustup component add clippy
-    - uses: actions-rs/clippy-check@v1
+    - name: Install Rust stable
+      uses: actions-rs/toolchain@v1
+      with:
+          toolchain: stable
+          components: clippy
+    - name: Run clippy
+      uses: actions-rs/clippy-check@v1
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
         args: --all-features
+    - name: Install windowing deps # for eframe/egui
+      run: apt update && apt install -y libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libspeechd-dev libxkbcommon-dev libssl-dev build-essential && apt clean
     - name: Build
       run: cargo build --verbose
     - name: Run tests
