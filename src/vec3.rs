@@ -283,7 +283,7 @@ mod tests {
         let three = Vec3::new(3.0, 3.0, 3.0);
         assert_eq!(three - Vec3::one(), two);
 
-        let mut v = three.clone();
+        let mut v = three;
         v -= Vec3::one();
         assert_eq!(v, two);
     }
@@ -304,7 +304,7 @@ mod tests {
         assert_eq!(initial * 3.0, tripled);
         assert_eq!(3.0 * initial, tripled);
 
-        let mut v = initial.clone();
+        let mut v = initial;
         v *= 3.0;
         assert_eq!(v, tripled);
     }
@@ -315,7 +315,7 @@ mod tests {
         let thirded = Vec3::new(1.0, 2.0, 3.0);
         assert_eq!(initial / 3.0, thirded);
 
-        let mut v = initial.clone();
+        let mut v = initial;
         v /= 3.0;
         assert_eq!(v, thirded);
     }

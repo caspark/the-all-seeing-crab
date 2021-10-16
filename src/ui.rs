@@ -24,11 +24,12 @@ struct UiData {
 
 impl UiData {
     fn new(width: usize, height: usize) -> Self {
-        let mut d = Self::default();
-        d.last_render_width = width;
-        d.last_render_height = height;
-        d.last_render_pixels = vec![RGB8 { r: 0, g: 0, b: 0 }; width * height];
-        d
+        Self {
+            last_render_width: width,
+            last_render_height: height,
+            last_render_pixels: vec![RGB8 { r: 0, g: 0, b: 0 }; width * height],
+            ..Default::default()
+        }
     }
 
     fn rebuild_texture(&mut self, tex_allocator: &mut dyn eframe::epi::TextureAllocator) {
@@ -178,10 +179,11 @@ impl TemplateApp {
         render_command_tx: flume::Sender<RenderCommand>,
         render_result_rx: flume::Receiver<RenderResult>,
     ) -> Self {
-        let mut config = RenderConfig::default();
-        config.output_filename = output_filename.to_owned();
         TemplateApp {
-            config,
+            config: RenderConfig {
+                output_filename: output_filename.to_owned(),
+                ..Default::default()
+            },
             data: None,
             terminal_display: Some(TerminalSettings::default()),
             render_command_tx,
@@ -243,9 +245,9 @@ impl epi::App for TemplateApp {
                     assert!(image_width > 0);
                     assert!(image_height > 0);
 
-                    self.data
-                        .as_mut()
-                        .map(|d| d.clear_texture(frame.tex_allocator()));
+                    if let Some(ref mut d) = self.data {
+                        d.clear_texture(frame.tex_allocator());
+                    }
                     self.data = Some(UiData::new(image_width, image_height));
                 }
                 Ok(RenderResult::ImageLine {

@@ -1,3 +1,5 @@
+#![deny(clippy::all)] // make all clippy warnings into errors
+
 mod aabb;
 mod bvh_node;
 mod camera;
@@ -350,7 +352,7 @@ fn render_image(config: RenderConfig, render_result_tx: &flume::Sender<RenderRes
             render_result_tx
                 .send(RenderResult::ImageLine {
                     line_num: j,
-                    line_pixels: line_pixels,
+                    line_pixels,
                 })
                 .ok()
                 .unwrap();
