@@ -25,7 +25,7 @@ jobs:
         token: ${{ secrets.GITHUB_TOKEN }}
         args: --all-features
     - name: Install windowing deps # for eframe/egui
-      run: apt update && apt install -y libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libspeechd-dev libxkbcommon-dev libssl-dev build-essential && apt clean
+      run: sudo apt-get update && sudo apt-get install -y libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libspeechd-dev libxkbcommon-dev libssl-dev build-essential && sudo apt-get clean
     - name: Build
       run: cargo build --verbose
     - name: Run tests
