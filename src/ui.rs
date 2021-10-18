@@ -187,7 +187,7 @@ impl TemplateApp {
             ..Default::default()
         };
         TemplateApp {
-            config: config,
+            config,
             data: None,
             scene_to_camera: HashMap::new(),
             terminal_display: Some(TerminalSettings::default()),
@@ -207,12 +207,11 @@ impl TemplateApp {
 
         self.render_command_tx
             .send(RenderCommand::Render {
-                cam_settings: self
+                cam_settings: *self
                     .scene_to_camera
                     .get(&self.config.scene)
                     .to_owned()
-                    .unwrap_or(&self.config.scene.default_camera_settings())
-                    .clone(),
+                    .unwrap_or(&self.config.scene.default_camera_settings()),
                 config: self.config.clone(),
             })
             .ok()
