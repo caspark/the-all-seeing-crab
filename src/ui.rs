@@ -158,15 +158,21 @@ impl Default for TerminalSettings {
     fn default() -> Self {
         Self {
             desired_width: 80,
-            desired_height: 13,
+            desired_height: 15,
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct DisplaySettings {
+    display_actual_size: bool,
 }
 
 #[derive(Debug)]
 pub struct TemplateApp {
     config: RenderConfig,
     data: Option<UiData>,
+    display: DisplaySettings,
 
     scene_to_camera: HashMap<RenderScene, CameraSettings>,
 
@@ -188,7 +194,8 @@ impl TemplateApp {
         };
         TemplateApp {
             config,
-            data: None,
+            data: Default::default(),
+            display: Default::default(),
             scene_to_camera: HashMap::new(),
             terminal_display: Some(TerminalSettings::default()),
             render_command_tx,
@@ -289,194 +296,245 @@ impl epi::App for TemplateApp {
         }
 
         egui::SidePanel::left("config_panel")
-            .resizable(false)
+            // .resizable(false)
             .show(ctx, |ui| {
-                ui.spacing_mut().item_spacing = egui::Vec2::new(8.0, 8.0);
+                egui::ScrollArea::auto_sized().show(ui, |ui| {
+                    ui.spacing_mut().item_spacing = egui::Vec2::new(8.0, 8.0);
 
-                ui.heading("Render Configuration");
-                egui::warn_if_debug_build(ui);
-                ui.end_row();
+                    ui.heading("Render Configuration");
+                    egui::warn_if_debug_build(ui);
+                    ui.end_row();
 
-                ui.horizontal(|ui| {
-                    ui.label("Scene");
+                    ui.horizontal(|ui| {
+                        ui.label("Scene");
 
-                    ui.radio_value(&mut self.config.scene, RenderScene::ThreeBody, "3 Body");
-                    ui.radio_value(&mut self.config.scene, RenderScene::ManyBalls, "Many Balls");
-                });
-                ui.end_row();
+                        ui.radio_value(&mut self.config.scene, RenderScene::ThreeBody, "3 Body");
+                        ui.radio_value(
+                            &mut self.config.scene,
+                            RenderScene::ManyBalls,
+                            "Many Balls",
+                        );
+                    });
+                    ui.end_row();
 
-                ui.horizontal(|ui| {
-                    ui.label("Save as");
-                    ui.text_edit_singleline(&mut self.config.output_filename);
-                });
-                ui.end_row();
+                    ui.horizontal(|ui| {
+                        ui.label("Save as");
+                        ui.text_edit_singleline(&mut self.config.output_filename);
+                    });
+                    ui.end_row();
 
-                ui.collapsing("Rendering options", |ui| {
-                    ui.collapsing("Reset to default", |ui| {
-                        if ui.button("Load default render settings").clicked() {
-                            self.config = RenderConfig::default();
+                    ui.vertical_centered_justified(|ui| {
+                        let button = egui::widgets::Button::new("Render image!");
+                        if ui.add(button).clicked() {
+                            self.trigger_render();
+                        }
+                    });
+                    ui.end_row();
+
+                    ui.collapsing("Graphical display options", |ui| {
+                        ui.checkbox(
+                            &mut self.display.display_actual_size,
+                            "Display render at actual 1:1 size",
+                        );
+                    });
+
+                    ui.collapsing("Terminal display options", |ui| {
+                        let mut terminal_progress = self.terminal_display.is_some();
+                        ui.checkbox(&mut &mut terminal_progress, "Render progress in terminal");
+
+                        if terminal_progress {
+                            let settings = self.terminal_display.get_or_insert(Default::default());
+
+                            ui.horizontal(|ui| {
+                                ui.label("Render size of");
+                                ui.add(
+                                    egui::widgets::DragValue::new(&mut settings.desired_width)
+                                        .suffix("w")
+                                        .speed(1),
+                                );
+                                ui.label("by");
+                                ui.add(
+                                    egui::widgets::DragValue::new(&mut settings.desired_height)
+                                        .suffix("h")
+                                        .speed(1),
+                                );
+                                ui.label("chars");
+                            });
+                        } else {
+                            self.terminal_display = None;
                         }
                     });
 
-                    ui.add(
-                        egui::Slider::new(&mut self.config.image_width, 1..=1000)
-                            .suffix("px")
-                            .text("Image width"),
-                    );
-                    ui.end_row();
-
-                    ui.add(
-                        egui::Slider::new(&mut self.config.image_height, 1..=500)
-                            .suffix("px")
-                            .text("Image height"),
-                    );
-                    ui.end_row();
-
-                    ui.add(
-                        egui::Slider::new(&mut self.config.samples_per_pixel, 1..=200)
-                            .text("Samples per pixel"),
-                    );
-                    ui.end_row();
-
-                    egui::ComboBox::from_label("Render mode")
-                        .selected_text(match self.config.render_mode {
-                            RayColorMode::BlockColor { .. } => "Block color",
-                            RayColorMode::ShadeNormal => "Normals",
-                            RayColorMode::Depth { .. } => "Depth test",
-                            RayColorMode::Material { .. } => "Material",
-                        })
-                        .show_ui(ui, |ui| {
-                            ui.selectable_value(
-                                &mut self.config.render_mode,
-                                RayColorMode::BlockColor {
-                                    color: Color::new(255.0, 0.0, 0.0),
-                                },
-                                "Block color",
-                            );
-                            ui.selectable_value(
-                                &mut self.config.render_mode,
-                                RayColorMode::Depth { max_t: 1.0 },
-                                "Depth test",
-                            );
-                            ui.selectable_value(
-                                &mut self.config.render_mode,
-                                RayColorMode::ShadeNormal,
-                                "Normals",
-                            );
-                            ui.selectable_value(
-                                &mut self.config.render_mode,
-                                RayColorMode::Material { depth: 50 },
-                                "Material",
-                            );
+                    ui.collapsing("Rendering options", |ui| {
+                        ui.collapsing("Reset to default", |ui| {
+                            if ui.button("Load default render settings").clicked() {
+                                self.config = RenderConfig::default();
+                            }
                         });
-                    ui.end_row();
 
-                    let sub_heading = "Mode settings";
-                    match self.config.render_mode {
-                        RayColorMode::BlockColor { ref mut color } => {
-                            ui.collapsing(sub_heading, |ui| {
-                                vec3_editor(ui, "Color", color);
-                            });
-                        }
-                        RayColorMode::ShadeNormal => (),
-                        RayColorMode::Depth { ref mut max_t } => {
-                            ui.collapsing(sub_heading, |ui| {
-                                ui.add(egui::Slider::new(max_t, 0.0..=20.0).text("Distance"));
-                            });
-                        }
-                        RayColorMode::Material { ref mut depth } => {
-                            ui.collapsing(sub_heading, |ui| {
-                                ui.add(egui::Slider::new(depth, 0..=100).text("Depth"));
-                            });
-                        }
-                    }
-                });
+                        ui.add(
+                            egui::Slider::new(&mut self.config.image_width, 1..=1000)
+                                .suffix("px")
+                                .text("Image width"),
+                        );
+                        ui.end_row();
 
-                ui.collapsing("Camera options", |ui| {
-                    let current_scene = self.config.scene;
-                    let cam = self
-                        .scene_to_camera
-                        .entry(self.config.scene)
-                        .or_insert_with(|| current_scene.default_camera_settings());
-                    ui.collapsing("Reset to default", |ui| {
-                        if ui.button("Load default camera settings").clicked() {
-                            *cam = current_scene.default_camera_settings();
+                        ui.add(
+                            egui::Slider::new(&mut self.config.image_height, 1..=500)
+                                .suffix("px")
+                                .text("Image height"),
+                        );
+                        ui.end_row();
+
+                        ui.add(
+                            egui::Slider::new(&mut self.config.samples_per_pixel, 1..=200)
+                                .text("Samples per pixel"),
+                        );
+                        ui.end_row();
+
+                        egui::ComboBox::from_label("Render mode")
+                            .selected_text(match self.config.render_mode {
+                                RayColorMode::BlockColor { .. } => "Block color",
+                                RayColorMode::ShadeNormal => "Normals",
+                                RayColorMode::Depth { .. } => "Depth test",
+                                RayColorMode::Material { .. } => "Material",
+                            })
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(
+                                    &mut self.config.render_mode,
+                                    RayColorMode::BlockColor {
+                                        color: Color::new(255.0, 0.0, 0.0),
+                                    },
+                                    "Block color",
+                                );
+                                ui.selectable_value(
+                                    &mut self.config.render_mode,
+                                    RayColorMode::Depth { max_t: 1.0 },
+                                    "Depth test",
+                                );
+                                ui.selectable_value(
+                                    &mut self.config.render_mode,
+                                    RayColorMode::ShadeNormal,
+                                    "Normals",
+                                );
+                                ui.selectable_value(
+                                    &mut self.config.render_mode,
+                                    RayColorMode::Material { depth: 50 },
+                                    "Material",
+                                );
+                            });
+                        ui.end_row();
+
+                        let sub_heading = "Mode settings";
+                        match self.config.render_mode {
+                            RayColorMode::BlockColor { ref mut color } => {
+                                ui.collapsing(sub_heading, |ui| {
+                                    vec3_editor(ui, "Color", color);
+                                });
+                            }
+                            RayColorMode::ShadeNormal => (),
+                            RayColorMode::Depth { ref mut max_t } => {
+                                ui.collapsing(sub_heading, |ui| {
+                                    ui.add(egui::Slider::new(max_t, 0.0..=20.0).text("Distance"));
+                                });
+                            }
+                            RayColorMode::Material { ref mut depth } => {
+                                ui.collapsing(sub_heading, |ui| {
+                                    ui.add(
+                                        egui::Slider::new(depth, 1..=100)
+                                            .text("Depth")
+                                            .clamp_to_range(true),
+                                    );
+                                });
+                            }
                         }
                     });
 
-                    vec3_editor(ui, "Look from", &mut cam.look_from);
-                    ui.end_row();
+                    ui.collapsing("Camera options", |ui| {
+                        let current_scene = self.config.scene;
+                        let cam = self
+                            .scene_to_camera
+                            .entry(self.config.scene)
+                            .or_insert_with(|| current_scene.default_camera_settings());
+                        ui.collapsing("Reset to default", |ui| {
+                            if ui.button("Load default camera settings").clicked() {
+                                *cam = current_scene.default_camera_settings();
+                            }
+                        });
 
-                    vec3_editor(ui, "Look at", &mut cam.look_at);
-                    ui.end_row();
+                        vec3_editor(ui, "Look from", &mut cam.look_from);
+                        ui.end_row();
 
-                    vec3_editor(ui, "Up direction", &mut cam.vup);
-                    ui.end_row();
+                        vec3_editor(ui, "Look at", &mut cam.look_at);
+                        ui.end_row();
 
-                    ui.add(
-                        egui::widgets::Slider::new(&mut cam.vfov, 10.0..=30.0).text("Vertical FoV"),
-                    );
-                    ui.end_row();
+                        vec3_editor(ui, "Up direction", &mut cam.vup);
+                        ui.end_row();
 
-                    ui.add(
-                        egui::widgets::Slider::new(&mut cam.focus_dist, 0.0..=30.0)
-                            .text("Focus distance"),
-                    );
-                    ui.end_row();
+                        ui.add(
+                            egui::widgets::Slider::new(&mut cam.vfov, 10.0..=30.0)
+                                .text("Vertical FoV"),
+                        );
+                        ui.end_row();
 
-                    ui.add(
-                        egui::widgets::Slider::new(&mut cam.aperture, 0.0..=2.0)
-                            .text("Aperture size"),
-                    );
-                    ui.end_row();
+                        ui.add(
+                            egui::widgets::Slider::new(&mut cam.focus_dist, 0.0..=30.0)
+                                .text("Focus distance"),
+                        );
+                        ui.end_row();
 
-                    ui.add(
-                        egui::widgets::Slider::new(&mut cam.time0, 0.0..=(cam.time1))
-                            .suffix("s")
-                            .text("Aperture open time"),
-                    );
-                    ui.end_row();
-                    ui.add(
-                        egui::widgets::Slider::new(&mut cam.time1, cam.time0..=3.0)
-                            .suffix("s")
-                            .text("Aperture close time"),
-                    );
-                    ui.end_row();
-                });
-                ui.end_row();
+                        ui.add(
+                            egui::widgets::Slider::new(&mut cam.aperture, 0.0..=2.0)
+                                .text("Aperture size"),
+                        );
+                        ui.end_row();
 
-                ui.vertical_centered_justified(|ui| {
-                    let button = egui::widgets::Button::new("Render image!");
-                    if ui.add(button).clicked() {
-                        self.trigger_render();
-                    }
-                });
-                ui.end_row();
+                        ui.add(
+                            egui::widgets::Slider::new(&mut cam.time0, 0.0..=(cam.time1))
+                                .suffix("s")
+                                .clamp_to_range(true)
+                                .text("Aperture open time"),
+                        );
+                        ui.end_row();
+                        ui.add(
+                            egui::widgets::Slider::new(&mut cam.time1, cam.time0..=3.0)
+                                .suffix("s")
+                                .clamp_to_range(true)
+                                .text("Aperture close time"),
+                        );
+                        ui.end_row();
+                    });
+                })
             });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.spacing_mut().item_spacing = egui::Vec2::new(8.0, 8.0);
-
-            if let Some(ref data) = self.data {
-                let sizing = egui::Vec2::new(
-                    data.last_render_width as f32,
-                    data.last_render_height as f32,
+            if let Some(ref mut data) = self.data {
+                ui.add(
+                    egui::ProgressBar::new(data.percent_complete())
+                        .animate(!data.complete())
+                        .desired_width(if self.display.display_actual_size {
+                            data.last_render_width as f32
+                        } else {
+                            ui.available_width()
+                        }),
                 );
-                ui.scope(|ui| {
+
+                let image_sizing = if self.display.display_actual_size {
+                    egui::Vec2::new(
+                        data.last_render_width as f32,
+                        data.last_render_height as f32,
+                    )
+                } else {
+                    let mut available = ui.available_size();
+                    available.y -= 25.0;
+                    available
+                };
+
+                egui::ScrollArea::auto_sized().show(ui, |ui| {
                     if let Some(tex_id) = data.last_render_tex {
-                        ui.image(tex_id, sizing);
-                        // ui.set_min_size(sizing);
-                    } else {
-                        // ui.set_min_size(egui::Vec2::new(0.0, 0.0));
+                        ui.image(tex_id, image_sizing);
                     }
                 });
-                if !data.complete() {
-                    ui.add(
-                        egui::ProgressBar::new(data.percent_complete())
-                            .animate(true)
-                            .desired_width(sizing.x),
-                    );
-                }
             }
         });
     }
