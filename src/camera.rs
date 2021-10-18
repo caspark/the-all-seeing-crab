@@ -2,6 +2,7 @@ use crate::{
     ray::Ray,
     util::{degrees_to_radians, random_double},
     vec3::{Point3, Vec3},
+    CameraSettings,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -21,51 +22,41 @@ pub(crate) struct Camera {
 }
 
 impl Camera {
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        look_from: Point3,
-        look_at: Point3,
-        vup: Vec3,
-        vfov: f64,
-        aspect_ratio: f64,
-        aperture: f64,
-        focus_dist: f64,
-        time0: f64,
-        time1: f64,
-    ) -> Camera {
+    pub fn new(settings: CameraSettings, aspect_ratio: f64, time0: f64, time1: f64) -> Camera {
         println!(
             "Looking from {from} to {at}, with up = {vup}",
-            from = look_from,
-            at = look_at,
-            vup = vup
+            from = settings.look_from,
+            at = settings.look_at,
+            vup = settings.vup
         );
 
-        let theta = degrees_to_radians(vfov);
+        let theta = degrees_to_radians(settings.vfov);
         let h = (theta / 2.0).tan();
         let viewport_height: f64 = 2.0 * h;
         let viewport_width: f64 = aspect_ratio * viewport_height;
 
-        let w = (look_from - look_at).to_unit();
-        let u = vup.cross(w).to_unit();
+        let w = (settings.look_from - settings.look_at).to_unit();
+        let u = settings.vup.cross(w).to_unit();
         let v = w.cross(u);
         println!(
             "Camera viewport is {height}x{width} with FOV of {fov}",
             height = viewport_height,
             width = viewport_width,
-            fov = vfov,
+            fov = settings.vfov,
         );
         println!(
             "FOV is {fov}, aperture is {aperture}, focus distance is {focus_dist}",
-            fov = vfov,
-            aperture = aperture,
-            focus_dist = focus_dist,
+            fov = settings.vfov,
+            aperture = settings.aperture,
+            focus_dist = settings.focus_dist,
         );
 
-        let origin: Point3 = look_from;
-        let horizontal = focus_dist * viewport_width * u;
-        let vertical = focus_dist * viewport_height * v;
-        let lower_left_corner = origin - horizontal / 2.0 - vertical / 2.0 - focus_dist * w;
-        let lens_radius = aperture / 2.0;
+        let origin: Point3 = settings.look_from;
+        let horizontal = settings.focus_dist * viewport_width * u;
+        let vertical = settings.focus_dist * viewport_height * v;
+        let lower_left_corner =
+            origin - horizontal / 2.0 - vertical / 2.0 - settings.focus_dist * w;
+        let lens_radius = settings.aperture / 2.0;
 
         Camera {
             origin,

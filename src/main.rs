@@ -16,7 +16,6 @@ mod vec3;
 use bvh_node::BvhNode;
 use material::{Dielectric, Material, Metal};
 use moving_sphere::MovingSphere;
-use rayon::prelude::*;
 use std::{env, f64::INFINITY};
 use util::random_double;
 
@@ -29,6 +28,68 @@ use crate::{
     camera::Camera, color::color_as_rgb8, material::DiffuseLambertian, sphere::Sphere, vec3::Vec3,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
+enum RenderScene {
+    ThreeBody,
+    ManyBalls,
+}
+
+impl RenderScene {
+    fn default_camera_settings(&self) -> CameraSettings {
+        match self {
+            RenderScene::ThreeBody => {
+                let look_from = Point3::new(3.0, 3.0, 2.0);
+                let look_at = Point3::new(0.0, 0.0, -1.0);
+                CameraSettings {
+                    look_from,
+                    look_at,
+                    vup: Vec3::new(0.0, 1.0, 0.0),
+                    vfov: 20.0,
+                    focus_dist: (look_from - look_at).length(),
+                    aperture: 1.0,
+                }
+            }
+            RenderScene::ManyBalls => CameraSettings {
+                look_from: Point3::new(13.0, 2.0, 3.0),
+                look_at: Point3::new(0.0, 0.0, 0.0),
+                vup: Vec3::new(0.0, 1.0, 0.0),
+                vfov: 20.0,
+                focus_dist: 10.0,
+                aperture: 0.1,
+            },
+        }
+    }
+}
+
+impl Default for RenderScene {
+    fn default() -> Self {
+        RenderScene::ThreeBody
+    }
+}
+
+#[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
+struct CameraSettings {
+    look_from: Point3,
+    look_at: Point3,
+    vup: Vec3,
+    vfov: f64,
+    focus_dist: f64,
+    aperture: f64,
+}
+
+impl Default for CameraSettings {
+    fn default() -> Self {
+        Self {
+            look_from: Point3::new(13.0, 2.0, 3.0),
+            look_at: Point3::new(0.0, 0.0, 0.0),
+            vup: Vec3::new(0.0, 1.0, 0.0),
+            vfov: 20.0,
+            focus_dist: 10.0,
+            aperture: 0.1,
+        }
+    }
+}
+
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 struct RenderConfig {
@@ -36,7 +97,7 @@ struct RenderConfig {
     image_height: usize,
     samples_per_pixel: u32,
     render_mode: RayColorMode,
-    generate_random_scene: bool,
+    scene: RenderScene,
     output_filename: String,
 }
 
@@ -66,15 +127,17 @@ impl Default for RenderConfig {
                 // RayColorMode::Depth { max_t: 1.0 }
                 RayColorMode::Material { depth: 50 }
             },
-
-            generate_random_scene: false,
+            scene: Default::default(),
             output_filename: "target/output.png".to_owned(),
         }
     }
 }
 
 enum RenderCommand {
-    Render { config: RenderConfig },
+    Render {
+        config: RenderConfig,
+        cam_settings: CameraSettings,
+    },
 }
 
 enum RenderResult {
@@ -278,7 +341,10 @@ fn run_render_loop(
         match render_command_rx.recv() {
             Err(flume::RecvError::Disconnected) => break, // nothing to do, just quit quietly
 
-            Ok(RenderCommand::Render { config }) => {
+            Ok(RenderCommand::Render {
+                config,
+                cam_settings,
+            }) => {
                 render_result_tx
                     .send(RenderResult::Reset {
                         image_height: config.image_height,
@@ -287,45 +353,25 @@ fn run_render_loop(
                     .ok()
                     .expect("sending Reset should succeed");
 
-                render_image(config, &render_result_tx);
+                render_image(config, cam_settings, &render_result_tx);
             }
         }
     }
 }
 
-fn render_image(config: RenderConfig, render_result_tx: &flume::Sender<RenderResult>) {
-    // camera
-    let cam = {
-        let (look_from, look_at) = if config.generate_random_scene {
-            (Point3::new(13.0, 2.0, 3.0), Point3::new(0.0, 0.0, 0.0))
-        } else {
-            (Point3::new(3.0, 3.0, 2.0), Point3::new(0.0, 0.0, -1.0))
-        };
-        let vup = Vec3::new(0.0, 1.0, 0.0);
-        let vfov = 20.0;
-        let (focus_dist, aperture) = if config.generate_random_scene {
-            (10.0, 0.1)
-        } else {
-            ((look_from - look_at).length(), 1.0)
-        };
-        Camera::new(
-            look_from,
-            look_at,
-            vup,
-            vfov,
-            config.aspect_ratio(),
-            aperture,
-            focus_dist,
-            0.0,
-            1.0,
-        )
+fn render_image(
+    config: RenderConfig,
+    cam_settings: CameraSettings,
+    render_result_tx: &flume::Sender<RenderResult>,
+) {
+    use rayon::prelude::*;
+
+    let world = match config.scene {
+        RenderScene::ThreeBody => create_fixed_scene(),
+        RenderScene::ManyBalls => create_random_scene(),
     };
 
-    let world = if config.generate_random_scene {
-        create_random_scene()
-    } else {
-        create_fixed_scene()
-    };
+    let cam = Camera::new(cam_settings, config.aspect_ratio(), 0.0, 1.0);
 
     //TODO this can't be interrupted with a new render yet - add "interrupt" and "queue" functionality
     (0..config.image_height)

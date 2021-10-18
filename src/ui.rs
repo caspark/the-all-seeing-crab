@@ -1,4 +1,4 @@
-use std::{io::Write, ops::Rem};
+use std::{collections::HashMap, io::Write, ops::Rem};
 
 use eframe::{
     egui::{self, TextureId},
@@ -7,8 +7,9 @@ use eframe::{
 use rgb::RGB8;
 
 use crate::{
-    color::rgb8_as_terminal_char, vec3::Color, RayColorMode, RenderCommand, RenderConfig,
-    RenderResult,
+    color::rgb8_as_terminal_char,
+    vec3::{Color, Vec3},
+    CameraSettings, RayColorMode, RenderCommand, RenderConfig, RenderResult, RenderScene,
 };
 
 #[derive(Debug, Default)]
@@ -167,6 +168,8 @@ pub struct TemplateApp {
     config: RenderConfig,
     data: Option<UiData>,
 
+    scene_to_camera: HashMap<RenderScene, CameraSettings>,
+
     terminal_display: Option<TerminalSettings>,
 
     render_command_tx: flume::Sender<RenderCommand>,
@@ -179,12 +182,14 @@ impl TemplateApp {
         render_command_tx: flume::Sender<RenderCommand>,
         render_result_rx: flume::Receiver<RenderResult>,
     ) -> Self {
+        let config = RenderConfig {
+            output_filename: output_filename.to_owned(),
+            ..Default::default()
+        };
         TemplateApp {
-            config: RenderConfig {
-                output_filename: output_filename.to_owned(),
-                ..Default::default()
-            },
+            config: config,
             data: None,
+            scene_to_camera: HashMap::new(),
             terminal_display: Some(TerminalSettings::default()),
             render_command_tx,
             render_result_rx,
@@ -199,8 +204,15 @@ impl TemplateApp {
             count = self.config.image_pixel_count(),
             samples =self. config.samples_per_pixel,
         );
+
         self.render_command_tx
             .send(RenderCommand::Render {
+                cam_settings: self
+                    .scene_to_camera
+                    .get(&self.config.scene)
+                    .to_owned()
+                    .unwrap_or(&self.config.scene.default_camera_settings())
+                    .clone(),
                 config: self.config.clone(),
             })
             .ok()
@@ -290,20 +302,40 @@ impl epi::App for TemplateApp {
 
         egui::SidePanel::left("config_panel").show(ctx, |ui| {
             ui.heading("Config");
+            ui.end_row();
 
             if ui.button("Reset config").clicked() {
                 self.config = RenderConfig::default();
             }
+            ui.end_row();
 
-            ui.add(egui::Slider::new(&mut self.config.image_width, 1..=1000).text("Image width"));
-            ui.add(egui::Slider::new(&mut self.config.image_height, 1..=500).text("Image height"));
+            ui.add(
+                egui::Slider::new(&mut self.config.image_width, 1..=1000)
+                    .suffix("px")
+                    .text("Image width"),
+            );
+            ui.end_row();
+
+            ui.add(
+                egui::Slider::new(&mut self.config.image_height, 1..=500)
+                    .suffix("px")
+                    .text("Image height"),
+            );
+            ui.end_row();
 
             ui.add(
                 egui::Slider::new(&mut self.config.samples_per_pixel, 1..=200)
                     .text("Samples per pixel"),
             );
+            ui.end_row();
 
-            ui.checkbox(&mut self.config.generate_random_scene, "Random scene");
+            ui.horizontal(|ui| {
+                ui.label("Render Scene");
+
+                ui.radio_value(&mut self.config.scene, RenderScene::ThreeBody, "3 Body");
+                ui.radio_value(&mut self.config.scene, RenderScene::ManyBalls, "Many Balls");
+            });
+            ui.end_row();
 
             egui::ComboBox::from_label("Render mode")
                 .selected_text(format!("{:?}", self.config.render_mode))
@@ -333,14 +365,53 @@ impl epi::App for TemplateApp {
                 });
             ui.end_row();
 
+            ui.collapsing("Camera settings", |ui| {
+                let current_scene = self.config.scene;
+                let cam = self
+                    .scene_to_camera
+                    .entry(self.config.scene)
+                    .or_insert_with(|| current_scene.default_camera_settings());
+
+                if ui.button("Reset camera").clicked() {
+                    *cam = current_scene.default_camera_settings();
+                }
+
+                vec3_editor(ui, "look from", &mut cam.look_from);
+                ui.end_row();
+
+                vec3_editor(ui, "look at", &mut cam.look_at);
+                ui.end_row();
+
+                vec3_editor(ui, "vup", &mut cam.vup);
+                ui.end_row();
+
+                ui.add(egui::widgets::Slider::new(&mut cam.vfov, 10.0..=30.0).text("Vertical FoV"));
+                ui.end_row();
+
+                ui.add(
+                    egui::widgets::Slider::new(&mut cam.focus_dist, 0.0..=30.0)
+                        .text("Focus distance"),
+                );
+                ui.end_row();
+
+                ui.add(
+                    egui::widgets::Slider::new(&mut cam.aperture, 0.0..=2.0).text("Aperture size"),
+                );
+                ui.end_row();
+            });
+            ui.end_row();
+
             ui.horizontal(|ui| {
                 ui.label("Output filename: ");
                 ui.text_edit_singleline(&mut self.config.output_filename);
             });
+            ui.end_row();
 
             if ui.button("Render").clicked() {
                 self.trigger_render();
             }
+            ui.end_row();
+
             egui::warn_if_debug_build(ui);
         });
 
@@ -360,4 +431,19 @@ impl epi::App for TemplateApp {
             }
         });
     }
+}
+
+fn vec3_editor(ui: &mut egui::Ui, label: &str, v: &mut Vec3) {
+    let speed = 0.1;
+
+    ui.horizontal(|ui| {
+        ui.label(label);
+
+        ui.label("x");
+        ui.add(egui::widgets::DragValue::new(&mut v.x).speed(speed));
+        ui.label("y");
+        ui.add(egui::widgets::DragValue::new(&mut v.y).speed(speed));
+        ui.label("z");
+        ui.add(egui::widgets::DragValue::new(&mut v.z).speed(speed));
+    });
 }
