@@ -35,7 +35,7 @@ impl HitRecord<'_> {
     }
 }
 
-pub(crate) trait Hittable: std::fmt::Debug + Sync {
+pub(crate) trait Hittable: std::fmt::Debug + Sync + Send {
     fn hit(&self, r: Ray, t_min: f64, t_max: f64) -> Option<HitRecord>;
     fn bounding_box(&self, time0: f64, time1: f64) -> Option<Aabb>;
 }

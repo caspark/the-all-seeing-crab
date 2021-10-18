@@ -345,6 +345,9 @@ fn run_render_loop(
     render_command_rx: flume::Receiver<RenderCommand>,
     render_result_tx: flume::Sender<RenderResult>,
 ) {
+    let mut abort_switch: Option<std::sync::Arc<std::sync::atomic::AtomicBool>> = Some(
+        std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+    );
     loop {
         match render_command_rx.recv() {
             Err(flume::RecvError::Disconnected) => break, // nothing to do, just quit quietly
@@ -361,54 +364,68 @@ fn run_render_loop(
                     .ok()
                     .expect("sending Reset should succeed");
 
-                render_image(config, cam_settings, &render_result_tx);
+                // abort any in progress render
+                if let Some(ref mut should_abort) = abort_switch {
+                    // cause a possible past render thread which is watching this flag to stop rendering
+                    should_abort.store(true, std::sync::atomic::Ordering::SeqCst);
+                    // set up the flag for the render thread we're about to kick off
+                    abort_switch = Some(std::sync::Arc::new(std::sync::atomic::AtomicBool::new(
+                        false,
+                    )));
+                }
+
+                let world = match config.scene {
+                    RenderScene::ThreeBody => create_fixed_scene(),
+                    RenderScene::ManyBalls => create_random_scene(),
+                };
+
+                let cam = Camera::new(cam_settings, config.aspect_ratio());
+
+                let render_result_tx = render_result_tx.clone();
+                let abort_checker = abort_switch.as_ref().unwrap().clone();
+                // drop the thread's join handle so that it runs in the background until rendering is done
+                std::mem::drop(std::thread::spawn(move || {
+                    use rayon::prelude::*;
+                    (0..config.image_height)
+                        .rev()
+                        .collect::<Vec<_>>()
+                        .into_par_iter()
+                        .for_each(|j| {
+                            if abort_checker.load(std::sync::atomic::Ordering::SeqCst) {
+                                // don't do the work of rendering if it's not useful
+                                return;
+                            }
+
+                            let mut line_pixels = Vec::with_capacity(config.image_width as usize);
+                            for i in 0..config.image_width {
+                                let mut pixel_color: Color = Color::zero();
+                                for _ in 0..config.samples_per_pixel {
+                                    let u = (i as f64 + util::random_double_unit())
+                                        / (config.image_width as f64 - 1.0);
+                                    let v = (j as f64 + util::random_double_unit())
+                                        / (config.image_height as f64 - 1.0);
+                                    let r = cam.get_ray(u, v);
+                                    pixel_color += ray_color(r, &world, config.render_mode);
+                                }
+
+                                let rgb8 = color_as_rgb8(pixel_color, config.samples_per_pixel);
+                                line_pixels.push(rgb8);
+                            }
+
+                            if abort_checker.load(std::sync::atomic::Ordering::SeqCst) {
+                                // don't send calculated image data if we should have already aborted
+                                return;
+                            }
+                            render_result_tx
+                                .send(RenderResult::ImageLine {
+                                    line_num: j,
+                                    line_pixels,
+                                })
+                                .ok()
+                                .unwrap();
+                        });
+                }));
             }
         }
     }
-}
-
-fn render_image(
-    config: RenderConfig,
-    cam_settings: CameraSettings,
-    render_result_tx: &flume::Sender<RenderResult>,
-) {
-    use rayon::prelude::*;
-
-    let world = match config.scene {
-        RenderScene::ThreeBody => create_fixed_scene(),
-        RenderScene::ManyBalls => create_random_scene(),
-    };
-
-    let cam = Camera::new(cam_settings, config.aspect_ratio());
-
-    //TODO this can't be interrupted with a new render yet - add "interrupt" and "queue" functionality
-    (0..config.image_height)
-        .rev()
-        .collect::<Vec<_>>()
-        .into_par_iter()
-        .for_each(|j| {
-            let mut line_pixels = Vec::with_capacity(config.image_width as usize);
-            for i in 0..config.image_width {
-                let mut pixel_color: Color = Color::zero();
-                for _ in 0..config.samples_per_pixel {
-                    let u =
-                        (i as f64 + util::random_double_unit()) / (config.image_width as f64 - 1.0);
-                    let v = (j as f64 + util::random_double_unit())
-                        / (config.image_height as f64 - 1.0);
-                    let r = cam.get_ray(u, v);
-                    pixel_color += ray_color(r, &world, config.render_mode);
-                }
-
-                let rgb8 = color_as_rgb8(pixel_color, config.samples_per_pixel);
-                line_pixels.push(rgb8);
-            }
-
-            render_result_tx
-                .send(RenderResult::ImageLine {
-                    line_num: j,
-                    line_pixels,
-                })
-                .ok()
-                .unwrap();
-        });
 }
