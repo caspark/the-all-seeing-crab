@@ -376,13 +376,13 @@ impl epi::App for TemplateApp {
                     *cam = current_scene.default_camera_settings();
                 }
 
-                vec3_editor(ui, "look from", &mut cam.look_from);
+                vec3_editor(ui, "Look from", &mut cam.look_from);
                 ui.end_row();
 
-                vec3_editor(ui, "look at", &mut cam.look_at);
+                vec3_editor(ui, "Look at", &mut cam.look_at);
                 ui.end_row();
 
-                vec3_editor(ui, "vup", &mut cam.vup);
+                vec3_editor(ui, "Up direction", &mut cam.vup);
                 ui.end_row();
 
                 ui.add(egui::widgets::Slider::new(&mut cam.vfov, 10.0..=30.0).text("Vertical FoV"));
@@ -396,6 +396,19 @@ impl epi::App for TemplateApp {
 
                 ui.add(
                     egui::widgets::Slider::new(&mut cam.aperture, 0.0..=2.0).text("Aperture size"),
+                );
+                ui.end_row();
+
+                ui.add(
+                    egui::widgets::Slider::new(&mut cam.time0, 0.0..=(cam.time1))
+                        .suffix("s")
+                        .text("Aperture open time"),
+                );
+                ui.end_row();
+                ui.add(
+                    egui::widgets::Slider::new(&mut cam.time1, cam.time0..=3.0)
+                        .suffix("s")
+                        .text("Aperture close time"),
                 );
                 ui.end_row();
             });
@@ -437,13 +450,13 @@ fn vec3_editor(ui: &mut egui::Ui, label: &str, v: &mut Vec3) {
     let speed = 0.1;
 
     ui.horizontal(|ui| {
-        ui.label(label);
-
         ui.label("x");
         ui.add(egui::widgets::DragValue::new(&mut v.x).speed(speed));
         ui.label("y");
         ui.add(egui::widgets::DragValue::new(&mut v.y).speed(speed));
         ui.label("z");
         ui.add(egui::widgets::DragValue::new(&mut v.z).speed(speed));
+
+        ui.label(label);
     });
 }

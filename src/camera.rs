@@ -22,7 +22,7 @@ pub(crate) struct Camera {
 }
 
 impl Camera {
-    pub fn new(settings: CameraSettings, aspect_ratio: f64, time0: f64, time1: f64) -> Camera {
+    pub fn new(settings: CameraSettings, aspect_ratio: f64) -> Camera {
         println!(
             "Looking from {from} to {at}, with up = {vup}",
             from = settings.look_from,
@@ -67,8 +67,8 @@ impl Camera {
             v,
             w,
             lens_radius,
-            time0,
-            time1,
+            time0: settings.time0,
+            time1: settings.time1,
         }
     }
 

@@ -47,6 +47,8 @@ impl RenderScene {
                     vfov: 20.0,
                     focus_dist: (look_from - look_at).length(),
                     aperture: 1.0,
+                    time0: 0.0,
+                    time1: 0.0,
                 }
             }
             RenderScene::ManyBalls => CameraSettings {
@@ -56,6 +58,8 @@ impl RenderScene {
                 vfov: 20.0,
                 focus_dist: 10.0,
                 aperture: 0.1,
+                time0: 0.0,
+                time1: 1.0,
             },
         }
     }
@@ -75,6 +79,8 @@ struct CameraSettings {
     vfov: f64,
     focus_dist: f64,
     aperture: f64,
+    time0: f64,
+    time1: f64,
 }
 
 impl Default for CameraSettings {
@@ -86,6 +92,8 @@ impl Default for CameraSettings {
             vfov: 20.0,
             focus_dist: 10.0,
             aperture: 0.1,
+            time0: 0.0,
+            time1: 1.0,
         }
     }
 }
@@ -371,7 +379,7 @@ fn render_image(
         RenderScene::ManyBalls => create_random_scene(),
     };
 
-    let cam = Camera::new(cam_settings, config.aspect_ratio(), 0.0, 1.0);
+    let cam = Camera::new(cam_settings, config.aspect_ratio());
 
     //TODO this can't be interrupted with a new render yet - add "interrupt" and "queue" functionality
     (0..config.image_height)
