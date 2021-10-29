@@ -6,26 +6,25 @@ mod camera;
 mod color;
 mod hittable;
 mod material;
-mod moving_sphere;
 mod ray;
 mod sphere;
 mod ui;
 mod util;
 mod vec3;
 
-use bvh_node::BvhNode;
-use material::{Dielectric, Material, Metal};
-use moving_sphere::MovingSphere;
-use std::{env, f64::INFINITY};
-use util::random_double;
-
-use hittable::Hittable;
-use ray::Ray;
 use rgb::RGB8;
-use vec3::{lerp, Color, Point3};
+use std::{env, f64::INFINITY};
 
 use crate::{
-    camera::Camera, color::color_as_rgb8, material::DiffuseLambertian, sphere::Sphere, vec3::Vec3,
+    bvh_node::BvhNode,
+    camera::Camera,
+    color::color_as_rgb8,
+    hittable::Hittable,
+    material::{Dielectric, DiffuseLambertian, Material, Metal},
+    ray::Ray,
+    sphere::Sphere,
+    util::random_double,
+    vec3::{lerp, Color, Point3, Vec3},
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
@@ -248,27 +247,27 @@ fn create_fixed_scene() -> BvhNode {
     let material_left = Box::new(Dielectric::new(1.5));
     let material_right = Box::new(Metal::new(Color::new(0.8, 0.6, 0.2), 0.0));
 
-    world.push(Box::new(Sphere::new(
+    world.push(Box::new(Sphere::stationary(
         Point3::new(0.0, -100.5, -1.0),
         100.0,
         material_ground,
     )) as Box<dyn Hittable>);
-    world.push(Box::new(Sphere::new(
+    world.push(Box::new(Sphere::stationary(
         Point3::new(0.0, 0.0, -1.0),
         0.5,
         material_center,
     )) as Box<dyn Hittable>);
-    world.push(Box::new(Sphere::new(
+    world.push(Box::new(Sphere::stationary(
         Point3::new(-1.0, 0.0, -1.0),
         0.5,
         material_left.clone(),
     )) as Box<dyn Hittable>);
-    world.push(Box::new(Sphere::new(
+    world.push(Box::new(Sphere::stationary(
         Point3::new(-1.0, 0.0, -1.0),
         -0.45,
         material_left,
     )) as Box<dyn Hittable>);
-    world.push(Box::new(Sphere::new(
+    world.push(Box::new(Sphere::stationary(
         Point3::new(1.0, 0.0, -1.0),
         0.5,
         material_right,
@@ -281,7 +280,7 @@ fn create_random_scene() -> BvhNode {
     let mut world = Vec::new();
 
     let material_ground = Box::new(DiffuseLambertian::new(Color::new(0.8, 0.8, 0.0)));
-    world.push(Box::new(Sphere::new(
+    world.push(Box::new(Sphere::stationary(
         Point3::new(0.0, -1000.0, 0.0),
         1000.0,
         material_ground,
@@ -311,28 +310,28 @@ fn create_random_scene() -> BvhNode {
                     Box::new(Dielectric::new(1.5)) // 1.5 is glass
                 };
                 world.push(if choose_mat < 0.4 {
-                    Box::new(Sphere::new(center, 0.2, material)) as Box<dyn Hittable>
+                    Box::new(Sphere::stationary(center, 0.2, material)) as Box<dyn Hittable>
                 } else {
                     let center2 = center + Vec3::new(0.0, random_double(0.0, 0.5), 0.0);
-                    Box::new(MovingSphere::new(center, center2, 0.0, 1.0, 0.2, material))
+                    Box::new(Sphere::moving(center, center2, 0.0, 1.0, 0.2, material))
                         as Box<dyn Hittable>
                 });
             }
         }
     }
 
-    world.push(Box::new(Sphere::new(
+    world.push(Box::new(Sphere::stationary(
         Point3::new(0.0, 1.0, 0.0),
         1.0,
         Box::new(Dielectric::new(1.5)),
     )));
 
-    world.push(Box::new(Sphere::new(
+    world.push(Box::new(Sphere::stationary(
         Point3::new(-4.0, 1.0, 0.0),
         1.0,
         Box::new(DiffuseLambertian::new(Color::new(0.1, 0.2, 0.5))),
     )));
-    world.push(Box::new(Sphere::new(
+    world.push(Box::new(Sphere::stationary(
         Point3::new(4.0, 1.0, 0.0),
         1.0,
         Box::new(Metal::new(Color::new(0.8, 0.6, 0.2), 0.0)),
