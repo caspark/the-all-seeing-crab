@@ -9,6 +9,10 @@ use crate::{
 pub(crate) struct HitRecord<'m> {
     /// How far along the ray the hit happened
     pub t: f64,
+    /// The u texture coordinate of the hit
+    pub u: f64,
+    /// The v texture coordinate of the hit
+    pub v: f64,
     /// Point (location) that the hit occurred at
     pub p: Point3,
     pub normal: Vec3,
@@ -17,7 +21,14 @@ pub(crate) struct HitRecord<'m> {
 }
 
 impl HitRecord<'_> {
-    pub(crate) fn new(t: f64, r: Ray, outward_normal: Vec3, material: &dyn Material) -> HitRecord {
+    #[allow(clippy::many_single_char_names)]
+    pub(crate) fn new(
+        t: f64,
+        (u, v): (f64, f64),
+        r: Ray,
+        outward_normal: Vec3,
+        material: &dyn Material,
+    ) -> HitRecord {
         let p = r.at(t);
         let front_face = r.direction().dot(outward_normal) < 0.0;
         let normal = if front_face {
@@ -27,6 +38,8 @@ impl HitRecord<'_> {
         };
         HitRecord {
             t,
+            u,
+            v,
             p,
             front_face,
             normal,

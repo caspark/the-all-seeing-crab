@@ -55,6 +55,28 @@ impl Material for DiffuseLambertian {
     }
 }
 
+/// True lambertian reflection with arbitrary textures
+#[derive(Debug, Constructor)]
+pub(crate) struct DiffuseLambertianTexture {
+    albedo: Box<dyn crate::texture::Texture>,
+}
+
+impl Material for DiffuseLambertianTexture {
+    fn scatter(&self, r_in: Ray, rec: &HitRecord) -> Option<(Color, Ray)> {
+        let mut scatter_direction = rec.normal + Vec3::random_unit_vector();
+
+        // avoid degenerate scatter direction (avoid infinities and NaNs)
+        if scatter_direction.near_zero() {
+            scatter_direction = rec.normal;
+        }
+
+        Some((
+            self.albedo.value(rec.u, rec.v, rec.p),
+            Ray::new(rec.p, scatter_direction, Some(r_in.time())),
+        ))
+    }
+}
+
 /// Hemispherical scattering
 #[derive(Debug, Clone, Copy, Constructor)]
 pub(crate) struct DiffuseHemispherical {

@@ -314,6 +314,11 @@ impl epi::App for TemplateApp {
                             RenderScene::ManyBalls,
                             "Many Balls",
                         );
+                        ui.radio_value(
+                            &mut self.config.scene,
+                            RenderScene::CheckersColliding,
+                            "Checkers Colliding",
+                        );
                     });
                     ui.end_row();
 

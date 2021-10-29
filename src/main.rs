@@ -8,12 +8,15 @@ mod hittable;
 mod material;
 mod ray;
 mod sphere;
+mod texture;
 mod ui;
 mod util;
 mod vec3;
 
+use material::DiffuseLambertianTexture;
 use rgb::RGB8;
 use std::{env, f64::INFINITY};
+use texture::{CheckerTexture, ColorTexture};
 
 use crate::{
     bvh_node::BvhNode,
@@ -31,6 +34,7 @@ use crate::{
 enum RenderScene {
     ThreeBody,
     ManyBalls,
+    CheckersColliding,
 }
 
 impl RenderScene {
@@ -45,7 +49,7 @@ impl RenderScene {
                     vup: Vec3::new(0.0, 1.0, 0.0),
                     vfov: 20.0,
                     focus_dist: (look_from - look_at).length(),
-                    aperture: 1.0,
+                    aperture: 0.25,
                     time0: 0.0,
                     time1: 0.0,
                 }
@@ -59,6 +63,16 @@ impl RenderScene {
                 aperture: 0.1,
                 time0: 0.0,
                 time1: 1.0,
+            },
+            RenderScene::CheckersColliding => CameraSettings {
+                look_from: Point3::new(13.0, 2.0, 3.0),
+                look_at: Point3::new(0.0, 0.0, 0.0),
+                vup: Vec3::new(0.0, 1.0, 0.0),
+                vfov: 20.0,
+                focus_dist: 10.0,
+                aperture: 0.1,
+                time0: 0.0,
+                time1: 0.0,
             },
         }
     }
@@ -242,8 +256,12 @@ fn print_usage_then_die(exe: &str, error: &str) {
 fn create_fixed_scene() -> BvhNode {
     let mut world = Vec::new();
 
-    let material_ground = Box::new(DiffuseLambertian::new(Color::new(0.8, 0.8, 0.0)));
-    let material_center = Box::new(DiffuseLambertian::new(Color::new(0.1, 0.2, 0.5)));
+    let material_ground = Box::new(DiffuseLambertianTexture::new(Box::new(
+        CheckerTexture::from_colors(10.0, Color::new(0.2, 0.3, 0.1), Color::new(0.9, 0.9, 0.9)),
+    )));
+    let material_center = Box::new(DiffuseLambertianTexture::new(Box::new(
+        ColorTexture::from_rgb(0.1, 0.2, 0.5),
+    )));
     let material_left = Box::new(Dielectric::new(1.5));
     let material_right = Box::new(Metal::new(Color::new(0.8, 0.6, 0.2), 0.0));
 
@@ -340,6 +358,33 @@ fn create_random_scene() -> BvhNode {
     BvhNode::new(world, 0.0, 1.0)
 }
 
+fn create_checkers_colliding_scene() -> BvhNode {
+    let mut world = Vec::new();
+
+    let light = Color::new(0.2, 0.3, 0.1);
+    let dark = Color::new(0.9, 0.9, 0.9);
+
+    let material_top = Box::new(DiffuseLambertianTexture::new(Box::new(
+        CheckerTexture::from_colors(10.0, light, dark),
+    )));
+    let material_bottom = Box::new(DiffuseLambertianTexture::new(Box::new(
+        CheckerTexture::from_colors(10.0, dark, light),
+    )));
+
+    world.push(Box::new(Sphere::stationary(
+        Point3::new(0.0, -10.0, 0.0),
+        10.0,
+        material_top,
+    )) as Box<dyn Hittable>);
+    world.push(Box::new(Sphere::stationary(
+        Point3::new(0.0, 10.0, 0.0),
+        10.0,
+        material_bottom,
+    )) as Box<dyn Hittable>);
+
+    BvhNode::new(world, 0.0, 0.0)
+}
+
 fn run_render_loop(
     render_command_rx: flume::Receiver<RenderCommand>,
     render_result_tx: flume::Sender<RenderResult>,
@@ -376,6 +421,7 @@ fn run_render_loop(
                 let world = match config.scene {
                     RenderScene::ThreeBody => create_fixed_scene(),
                     RenderScene::ManyBalls => create_random_scene(),
+                    RenderScene::CheckersColliding => create_checkers_colliding_scene(),
                 };
 
                 let cam = Camera::new(cam_settings, config.aspect_ratio());

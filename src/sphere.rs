@@ -50,8 +50,16 @@ impl Sphere {
         }
     }
 
+    pub(crate) fn get_sphere_uv(p: Point3) -> (f64, f64) {
+        let theta = (-p.y).acos();
+        let phi = (-p.z).atan2(p.x) + std::f64::consts::PI;
+        let u = phi / (2.0 * std::f64::consts::PI);
+        let v = theta / std::f64::consts::PI;
+        (u, v)
+    }
+
     pub(crate) fn center(&self, time: f64) -> Point3 {
-        if self.time0 == self.time1 {
+        if (self.time0 - self.time1).abs() < f64::EPSILON {
             self.center0
         } else {
             self.center0
@@ -85,7 +93,13 @@ impl Hittable for Sphere {
         let t = root;
         let p = r.at(t);
         let outward_normal: Vec3 = (p - self.center(r.time())) / self.radius;
-        Some(HitRecord::new(t, r, outward_normal, &*self.material))
+        Some(HitRecord::new(
+            t,
+            Sphere::get_sphere_uv(outward_normal),
+            r,
+            outward_normal,
+            &*self.material,
+        ))
     }
 
     fn bounding_box(&self, time0: f64, time1: f64) -> Option<Aabb> {
