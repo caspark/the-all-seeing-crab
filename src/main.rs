@@ -6,6 +6,7 @@ mod camera;
 mod color;
 mod hittable;
 mod material;
+mod perlin;
 mod ray;
 mod sphere;
 mod texture;
@@ -14,9 +15,10 @@ mod util;
 mod vec3;
 
 use material::DiffuseLambertianTexture;
+use perlin::Perlin;
 use rgb::RGB8;
 use std::{env, f64::INFINITY};
-use texture::{CheckerTexture, ColorTexture};
+use texture::{CheckerTexture, ColorTexture, NoiseTexture, PositionTexture};
 
 use crate::{
     bvh_node::BvhNode,
@@ -35,6 +37,7 @@ enum RenderScene {
     ThreeBody,
     ManyBalls,
     CheckersColliding,
+    PerlinNoise,
 }
 
 impl RenderScene {
@@ -74,6 +77,53 @@ impl RenderScene {
                 time0: 0.0,
                 time1: 0.0,
             },
+            RenderScene::PerlinNoise => CameraSettings {
+                look_from: Point3::new(13.0, 2.0, 3.0),
+                look_at: Point3::new(0.0, 0.0, 0.0),
+                vup: Vec3::new(0.0, 1.0, 0.0),
+                vfov: 20.0,
+                focus_dist: 10.0,
+                aperture: 0.0,
+                time0: 0.0,
+                time1: 0.0,
+            },
+        }
+    }
+
+    fn create_world(&self) -> BvhNode {
+        match self {
+            RenderScene::ThreeBody => create_fixed_scene(),
+            RenderScene::ManyBalls => create_random_scene(),
+            RenderScene::CheckersColliding => create_checkers_colliding_scene(),
+            RenderScene::PerlinNoise => {
+                let mut world = Vec::new();
+
+                let noise = Perlin::new();
+
+                let material_ground = Box::new(DiffuseLambertianTexture::new(Box::new(
+                    CheckerTexture::new(
+                        2.0,
+                        Box::new(NoiseTexture::new(noise.clone())),
+                        Box::new(PositionTexture::new()),
+                    ),
+                )));
+                let material_center = Box::new(DiffuseLambertianTexture::new(Box::new(
+                    NoiseTexture::new(noise),
+                )));
+
+                world.push(Box::new(Sphere::stationary(
+                    Point3::new(0.0, -1000.0, 0.0),
+                    1000.0,
+                    material_ground,
+                )) as Box<dyn Hittable>);
+                world.push(Box::new(Sphere::stationary(
+                    Point3::new(0.0, 2.0, 0.0),
+                    2.0,
+                    material_center,
+                )) as Box<dyn Hittable>);
+
+                BvhNode::new(world, 0.0, 0.0)
+            }
         }
     }
 }
@@ -372,12 +422,12 @@ fn create_checkers_colliding_scene() -> BvhNode {
     )));
 
     world.push(Box::new(Sphere::stationary(
-        Point3::new(0.0, -10.0, 0.0),
+        Point3::new(0.0, 10.0, 0.0),
         10.0,
         material_top,
     )) as Box<dyn Hittable>);
     world.push(Box::new(Sphere::stationary(
-        Point3::new(0.0, 10.0, 0.0),
+        Point3::new(0.0, -10.0, 0.0),
         10.0,
         material_bottom,
     )) as Box<dyn Hittable>);
@@ -418,11 +468,7 @@ fn run_render_loop(
                     )));
                 }
 
-                let world = match config.scene {
-                    RenderScene::ThreeBody => create_fixed_scene(),
-                    RenderScene::ManyBalls => create_random_scene(),
-                    RenderScene::CheckersColliding => create_checkers_colliding_scene(),
-                };
+                let world = config.scene.create_world();
 
                 let cam = Camera::new(cam_settings, config.aspect_ratio());
 

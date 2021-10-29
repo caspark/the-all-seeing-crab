@@ -307,18 +307,28 @@ impl epi::App for TemplateApp {
 
                     ui.horizontal(|ui| {
                         ui.label("Scene");
-
-                        ui.radio_value(&mut self.config.scene, RenderScene::ThreeBody, "3 Body");
-                        ui.radio_value(
-                            &mut self.config.scene,
-                            RenderScene::ManyBalls,
-                            "Many Balls",
-                        );
-                        ui.radio_value(
-                            &mut self.config.scene,
-                            RenderScene::CheckersColliding,
-                            "Checkers Colliding",
-                        );
+                        ui.vertical(|ui| {
+                            ui.radio_value(
+                                &mut self.config.scene,
+                                RenderScene::ThreeBody,
+                                "3 Body",
+                            );
+                            ui.radio_value(
+                                &mut self.config.scene,
+                                RenderScene::ManyBalls,
+                                "Many Balls",
+                            );
+                            ui.radio_value(
+                                &mut self.config.scene,
+                                RenderScene::CheckersColliding,
+                                "Checkers Colliding",
+                            );
+                            ui.radio_value(
+                                &mut self.config.scene,
+                                RenderScene::PerlinNoise,
+                                "Perlin Noise",
+                            );
+                        });
                     });
                     ui.end_row();
 
