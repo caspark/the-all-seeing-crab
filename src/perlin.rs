@@ -1,8 +1,11 @@
-use crate::{util, vec3::Point3};
+use crate::{
+    util,
+    vec3::{Point3, Vec3},
+};
 
 #[derive(Clone, Debug)]
 pub(crate) struct Perlin {
-    ran_float: Vec<f64>,
+    ran_float: Vec<Vec3>,
     perm_x: Vec<i32>,
     perm_y: Vec<i32>,
     perm_z: Vec<i32>,
@@ -14,7 +17,7 @@ impl Perlin {
     pub(crate) fn new() -> Self {
         let mut ran_float = Vec::with_capacity(POINT_COUNT);
         for _ in 0..POINT_COUNT {
-            ran_float.push(rand::random::<f64>());
+            ran_float.push(Vec3::random(-1.0, 1.0));
         }
 
         Self {
@@ -55,7 +58,7 @@ impl Perlin {
         let i = p.x.floor() as i32;
         let j = p.y.floor() as i32;
         let k = p.z.floor() as i32;
-        let mut c = [[[0f64; 2]; 2]; 2];
+        let mut c = [[[Vec3::zero(); 2]; 2]; 2];
 
         for (di, ci) in c.iter_mut().enumerate() {
             for (dj, cij) in ci.iter_mut().enumerate() {
@@ -73,15 +76,17 @@ impl Perlin {
         Perlin::trilinear_interpolate(c, u, v, w)
     }
 
-    fn trilinear_interpolate(c: [[[f64; 2]; 2]; 2], u: f64, v: f64, w: f64) -> f64 {
+    fn trilinear_interpolate(c: [[[Vec3; 2]; 2]; 2], u: f64, v: f64, w: f64) -> f64 {
         let mut accum = 0.0;
         for (i, ci) in c.iter().enumerate() {
             for (j, cij) in ci.iter().enumerate() {
                 for (k, cijk) in cij.iter().enumerate() {
+                    let weight_v = Vec3::new(u - i as f64, v - j as f64, w - k as f64);
+
                     let uterm = i as f64 * u + (1.0 - i as f64) * (1.0 - u);
                     let vterm = j as f64 * v + (1.0 - j as f64) * (1.0 - v);
                     let wterm = k as f64 * w + (1.0 - k as f64) * (1.0 - w);
-                    accum += uterm * vterm * wterm * cijk;
+                    accum += uterm * vterm * wterm * cijk.dot(weight_v);
                 }
             }
         }

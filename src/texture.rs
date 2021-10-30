@@ -77,6 +77,6 @@ pub(crate) struct NoiseTexture {
 
 impl Texture for NoiseTexture {
     fn value(&self, _u: f64, _v: f64, p: Vec3) -> Color {
-        Color::one() * self.noise.sample(self.scale * p)
+        Color::one() * 0.5 * (1.0 + self.noise.sample(self.scale * p))
     }
 }
