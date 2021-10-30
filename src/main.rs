@@ -101,11 +101,7 @@ impl RenderScene {
                 let noise = Perlin::new();
 
                 let material_ground = Box::new(DiffuseLambertianTexture::new(Box::new(
-                    CheckerTexture::new(
-                        2.0,
-                        Box::new(NoiseTexture::new(noise.clone())),
-                        Box::new(PositionTexture::new()),
-                    ),
+                    NoiseTexture::new(noise.clone()),
                 )));
                 let material_center = Box::new(DiffuseLambertianTexture::new(Box::new(
                     NoiseTexture::new(noise),
