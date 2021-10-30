@@ -44,8 +44,20 @@ impl Perlin {
         }
     }
 
+    pub(crate) fn sample_turbulence(&self, p: Point3, depth: i32) -> f64 {
+        let mut accum = 0.0;
+        let mut temp_p = p;
+        let mut weight = 1.0;
+        for _ in 0..depth {
+            accum += weight * self.sample_noise(temp_p);
+            weight *= 0.5;
+            temp_p *= 2.0;
+        }
+        accum.abs()
+    }
+
     #[allow(clippy::many_single_char_names)]
-    pub(crate) fn sample(&self, p: Point3) -> f64 {
+    pub(crate) fn sample_noise(&self, p: Point3) -> f64 {
         let mut u = p.x - p.x.floor();
         let mut v = p.y - p.y.floor();
         let mut w = p.z - p.z.floor();

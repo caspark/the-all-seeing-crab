@@ -18,7 +18,7 @@ use material::DiffuseLambertianTexture;
 use perlin::Perlin;
 use rgb::RGB8;
 use std::{env, f64::INFINITY};
-use texture::{CheckerTexture, ColorTexture, NoiseTexture};
+use texture::{CheckerTexture, ColorTexture, MarbleTexture, NoiseTexture, TurbulenceTexture};
 
 use crate::{
     bvh_node::BvhNode,
@@ -79,7 +79,7 @@ impl RenderScene {
             },
             RenderScene::PerlinNoise => CameraSettings {
                 look_from: Point3::new(13.0, 2.0, 3.0),
-                look_at: Point3::new(0.0, 0.0, 0.0),
+                look_at: Point3::new(0.0, 1.0, 0.0),
                 vup: Vec3::new(0.0, 1.0, 0.0),
                 vfov: 20.0,
                 focus_dist: 10.0,
@@ -104,7 +104,10 @@ impl RenderScene {
                     NoiseTexture::new(noise.clone(), 4.0),
                 )));
                 let material_center = Box::new(DiffuseLambertianTexture::new(Box::new(
-                    NoiseTexture::new(noise, 4.0),
+                    MarbleTexture::new(noise.clone(), 4.0, 5),
+                )));
+                let material_right = Box::new(DiffuseLambertianTexture::new(Box::new(
+                    TurbulenceTexture::new(noise, 4.0, 5),
                 )));
 
                 world.push(Box::new(Sphere::stationary(
@@ -116,6 +119,11 @@ impl RenderScene {
                     Point3::new(0.0, 2.0, 0.0),
                     2.0,
                     material_center,
+                )) as Box<dyn Hittable>);
+                world.push(Box::new(Sphere::stationary(
+                    Point3::new(-1.0, 2.0, -2.0),
+                    2.0,
+                    material_right,
                 )) as Box<dyn Hittable>);
 
                 BvhNode::new(world, 0.0, 0.0)

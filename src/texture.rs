@@ -77,6 +77,40 @@ pub(crate) struct NoiseTexture {
 
 impl Texture for NoiseTexture {
     fn value(&self, _u: f64, _v: f64, p: Vec3) -> Color {
-        Color::one() * 0.5 * (1.0 + self.noise.sample(self.scale * p))
+        Color::one() * 0.5 * (1.0 + self.noise.sample_noise(self.scale * p))
+    }
+}
+
+/// A texture which is colored based on a provided noise source providing turbulence (multiple
+/// layers of noise).
+#[derive(Debug, Constructor)]
+pub(crate) struct TurbulenceTexture {
+    noise: Perlin,
+    scale: f64,
+    depth: i32,
+}
+
+impl Texture for TurbulenceTexture {
+    fn value(&self, _u: f64, _v: f64, p: Vec3) -> Color {
+        Color::one() * self.noise.sample_turbulence(self.scale * p, self.depth)
+    }
+}
+
+/// A procedural marble texture based on turbulated noise.
+#[derive(Debug, Constructor)]
+pub(crate) struct MarbleTexture {
+    noise: Perlin,
+    scale: f64,
+    depth: i32,
+}
+
+impl Texture for MarbleTexture {
+    fn value(&self, _u: f64, _v: f64, p: Vec3) -> Color {
+        Color::one()
+            * 0.5
+            * (1.0
+                + (self.scale * p.z
+                    + 5.0 * self.noise.sample_turbulence(self.scale * p, self.depth))
+                .sin())
     }
 }
