@@ -72,10 +72,11 @@ impl Texture for PositionTexture {
 #[derive(Debug, Constructor)]
 pub(crate) struct NoiseTexture {
     noise: Perlin,
+    scale: f64,
 }
 
 impl Texture for NoiseTexture {
     fn value(&self, _u: f64, _v: f64, p: Vec3) -> Color {
-        Color::one() * self.noise.sample(p)
+        Color::one() * self.noise.sample(self.scale * p)
     }
 }

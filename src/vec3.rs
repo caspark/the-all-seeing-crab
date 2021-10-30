@@ -37,7 +37,6 @@ impl Vec3 {
         Default::default()
     }
 
-    #[allow(dead_code)]
     pub(crate) fn one() -> Self {
         Vec3 {
             x: 1.0,

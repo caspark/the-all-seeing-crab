@@ -101,10 +101,10 @@ impl RenderScene {
                 let noise = Perlin::new();
 
                 let material_ground = Box::new(DiffuseLambertianTexture::new(Box::new(
-                    NoiseTexture::new(noise.clone()),
+                    NoiseTexture::new(noise.clone(), 4.0),
                 )));
                 let material_center = Box::new(DiffuseLambertianTexture::new(Box::new(
-                    NoiseTexture::new(noise),
+                    NoiseTexture::new(noise, 4.0),
                 )));
 
                 world.push(Box::new(Sphere::stationary(
