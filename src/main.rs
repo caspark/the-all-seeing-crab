@@ -18,7 +18,7 @@ use material::DiffuseLambertianTexture;
 use perlin::Perlin;
 use rgb::RGB8;
 use std::{env, f64::INFINITY};
-use texture::{CheckerTexture, ColorTexture, NoiseTexture, PositionTexture};
+use texture::{CheckerTexture, ColorTexture, NoiseTexture};
 
 use crate::{
     bvh_node::BvhNode,

@@ -41,6 +41,7 @@ impl Perlin {
         }
     }
 
+    #[allow(clippy::many_single_char_names)]
     pub(crate) fn sample(&self, p: Point3) -> f64 {
         let mut u = p.x - p.x.floor();
         let mut v = p.y - p.y.floor();
@@ -56,31 +57,31 @@ impl Perlin {
         let k = p.z.floor() as i32;
         let mut c = [[[0f64; 2]; 2]; 2];
 
-        for di in 0..2 {
-            for dj in 0..2 {
-                for dk in 0..2 {
+        for (di, ci) in c.iter_mut().enumerate() {
+            for (dj, cij) in ci.iter_mut().enumerate() {
+                for (dk, cijk) in cij.iter_mut().enumerate() {
                     let x = self.perm_x[((i + di as i32) & 255) as usize];
                     let y = self.perm_y[((j + dj as i32) & 255) as usize];
                     let z = self.perm_z[((k + dk as i32) & 255) as usize];
 
                     let idx = x ^ y ^ z;
-                    c[di][dj][dk] = self.ran_float[idx as usize];
+                    *cijk = self.ran_float[idx as usize];
                 }
             }
         }
 
-        return Perlin::trilinear_interpolate(c, u, v, w);
+        Perlin::trilinear_interpolate(c, u, v, w)
     }
 
     fn trilinear_interpolate(c: [[[f64; 2]; 2]; 2], u: f64, v: f64, w: f64) -> f64 {
         let mut accum = 0.0;
-        for i in 0..2 {
-            for j in 0..2 {
-                for k in 0..2 {
+        for (i, ci) in c.iter().enumerate() {
+            for (j, cij) in ci.iter().enumerate() {
+                for (k, cijk) in cij.iter().enumerate() {
                     let uterm = i as f64 * u + (1.0 - i as f64) * (1.0 - u);
                     let vterm = j as f64 * v + (1.0 - j as f64) * (1.0 - v);
                     let wterm = k as f64 * w + (1.0 - k as f64) * (1.0 - w);
-                    accum += uterm * vterm * wterm * c[i][j][k];
+                    accum += uterm * vterm * wterm * cijk;
                 }
             }
         }
