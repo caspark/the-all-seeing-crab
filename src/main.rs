@@ -1,6 +1,7 @@
 #![deny(clippy::all)] // make all clippy warnings into errors
 
 mod aabb;
+mod aarect;
 mod bvh_node;
 mod camera;
 mod color;
@@ -14,7 +15,8 @@ mod ui;
 mod util;
 mod vec3;
 
-use material::DiffuseLambertianTexture;
+use aarect::XyRect;
+use material::{DiffuseLambertianTexture, DiffuseLight};
 use perlin::Perlin;
 use rgb::RGB8;
 use std::{env, f64::INFINITY};
@@ -34,6 +36,21 @@ use crate::{
     vec3::{lerp, Color, Point3, Vec3},
 };
 
+#[derive(Debug)]
+struct World {
+    background: Option<Color>,
+    node: BvhNode,
+}
+
+impl From<BvhNode> for World {
+    fn from(node: BvhNode) -> Self {
+        Self {
+            node,
+            background: Default::default(),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 enum RenderScene {
     ThreeBody,
@@ -41,6 +58,7 @@ enum RenderScene {
     CheckersColliding,
     PerlinNoise,
     EarthGlobe,
+    LightDemo,
 }
 
 impl RenderScene {
@@ -73,14 +91,18 @@ impl RenderScene {
             RenderScene::CheckersColliding => CameraSettings::default(),
             RenderScene::PerlinNoise => CameraSettings::default(),
             RenderScene::EarthGlobe => CameraSettings::default(),
+            RenderScene::LightDemo => CameraSettings::new_from_looking(
+                Point3::new(26.0, 3.0, 6.0),
+                Point3::new(0.0, 2.0, 0.0),
+            ),
         }
     }
 
-    fn create_world(&self) -> BvhNode {
+    fn create_world(&self) -> World {
         match self {
-            RenderScene::ThreeBody => create_fixed_scene(),
-            RenderScene::ManyBalls => create_random_scene(),
-            RenderScene::CheckersColliding => create_checkers_colliding_scene(),
+            RenderScene::ThreeBody => create_fixed_scene().into(),
+            RenderScene::ManyBalls => create_random_scene().into(),
+            RenderScene::CheckersColliding => create_checkers_colliding_scene().into(),
             RenderScene::PerlinNoise => {
                 let mut world = Vec::new();
 
@@ -112,7 +134,7 @@ impl RenderScene {
                     material_right,
                 )) as Box<dyn Hittable>);
 
-                BvhNode::new(world, 0.0, 0.0)
+                BvhNode::new(world, 0.0, 0.0).into()
             }
             RenderScene::EarthGlobe => {
                 let mut world = Vec::new();
@@ -128,8 +150,51 @@ impl RenderScene {
                     material,
                 )) as Box<dyn Hittable>);
 
-                BvhNode::new(world, 0.0, 0.0)
+                BvhNode::new(world, 0.0, 0.0).into()
             }
+            RenderScene::LightDemo => World {
+                background: Some(Color::new(0.0, 0.0, 0.0)),
+                node: {
+                    let mut world = Vec::new();
+
+                    let noise = Perlin::new();
+
+                    // ground
+                    world.push(Box::new(Sphere::stationary(
+                        Point3::new(0.0, -1000.0, 0.0),
+                        1000.0,
+                        Box::new(DiffuseLambertianTexture::new(Box::new(MarbleTexture::new(
+                            noise.clone(),
+                            4.0,
+                            7,
+                        )))),
+                    )) as Box<dyn Hittable>);
+                    // floating sphere
+                    world.push(Box::new(Sphere::stationary(
+                        Point3::new(0.0, 2.0, 0.0),
+                        2.0,
+                        Box::new(DiffuseLambertianTexture::new(Box::new(MarbleTexture::new(
+                            noise.clone(),
+                            4.0,
+                            7,
+                        )))),
+                    )) as Box<dyn Hittable>);
+
+                    // light
+                    world.push(Box::new(XyRect::new(
+                        3.0,
+                        5.0,
+                        1.0,
+                        3.0,
+                        -2.0,
+                        Box::new(DiffuseLight::new(Box::new(ColorTexture::from_rgb(
+                            4.0, 4.0, 4.0,
+                        )))),
+                    )) as Box<dyn Hittable>);
+
+                    BvhNode::new(world, 0.0, 0.0)
+                },
+            },
         }
     }
 }
@@ -150,6 +215,16 @@ struct CameraSettings {
     aperture: f64,
     time0: f64,
     time1: f64,
+}
+
+impl CameraSettings {
+    fn new_from_looking(look_from: Point3, look_at: Point3) -> Self {
+        Self {
+            look_from,
+            look_at,
+            ..CameraSettings::default()
+        }
+    }
 }
 
 impl Default for CameraSettings {
@@ -240,7 +315,7 @@ enum RayColorMode {
     Material { depth: i32 },
 }
 
-fn ray_color(r: Ray, world: &dyn Hittable, mode: RayColorMode) -> Color {
+fn ray_color(r: Ray, background: Option<Color>, world: &dyn Hittable, mode: RayColorMode) -> Color {
     if let RayColorMode::Material { depth } = mode {
         if depth <= 0 {
             return Color::zero();
@@ -253,21 +328,26 @@ fn ray_color(r: Ray, world: &dyn Hittable, mode: RayColorMode) -> Color {
             RayColorMode::ShadeNormal => 0.5 * (rec.normal + Color::new(1.0, 1.0, 1.0)),
             RayColorMode::Depth { max_t } => Color::one() - rec.t / max_t * Color::one(),
             RayColorMode::Material { depth } => {
+                let emitted = rec.mat_ptr.emitted(rec.u, rec.v, rec.p);
+
                 if let Some((attenuation, scattered)) = rec.mat_ptr.scatter(r, &rec) {
                     let new_depth = RayColorMode::Material { depth: depth - 1 };
-                    return attenuation * ray_color(scattered, world, new_depth);
+                    return emitted
+                        + attenuation * ray_color(scattered, background, world, new_depth);
                 } else {
-                    return Color::zero();
+                    return emitted;
                 }
             }
         };
     }
 
-    let unit_direction = r.direction().to_unit();
-    let t = 0.5 * (unit_direction.y + 1.0);
-    let ground: Color = Color::new(1.0, 1.0, 1.0);
-    let sky: Color = Color::new(0.5, 0.7, 1.0);
-    lerp(t, ground, sky)
+    background.unwrap_or_else(|| {
+        let unit_direction = r.direction().to_unit();
+        let t = 0.5 * (unit_direction.y + 1.0);
+        let ground: Color = Color::new(1.0, 1.0, 1.0);
+        let sky: Color = Color::new(0.5, 0.7, 1.0);
+        lerp(t, ground, sky)
+    })
 }
 
 fn main() {
@@ -502,7 +582,12 @@ fn run_render_loop(
                                     let v = (j as f64 + util::random_double_unit())
                                         / (config.image_height as f64 - 1.0);
                                     let r = cam.get_ray(u, v);
-                                    pixel_color += ray_color(r, &world, config.render_mode);
+                                    pixel_color += ray_color(
+                                        r,
+                                        world.background,
+                                        &world.node,
+                                        config.render_mode,
+                                    );
                                 }
 
                                 let rgb8 = color_as_rgb8(pixel_color, config.samples_per_pixel);

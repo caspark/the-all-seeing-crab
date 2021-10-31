@@ -1,14 +1,19 @@
 use crate::{
     hittable::HitRecord,
     ray::Ray,
+    texture::Texture,
     util::random_double,
-    vec3::{Color, Vec3},
+    vec3::{Color, Point3, Vec3},
 };
 use derive_more::Constructor;
 
-pub(crate) trait Material: std::fmt::Debug {
+pub(crate) trait Material: std::fmt::Debug + Send + Sync {
     /// Returns the scattered ray
     fn scatter(&self, r_in: Ray, rec: &HitRecord) -> Option<(Color, Ray)>;
+
+    fn emitted(&self, _u: f64, _v: f64, _p: Point3) -> Color {
+        Color::zero()
+    }
 }
 
 /// Bias of having light bounce towards the normal
@@ -178,5 +183,22 @@ impl Material for Dielectric {
 
         let scattered = Ray::new(rec.p, direction, Some(r_in.time()));
         Some((attenuation, scattered))
+    }
+}
+
+/// Dielectric metals (glass, water, etc)
+#[derive(Debug, Constructor)]
+pub(crate) struct DiffuseLight {
+    /// Index of refraction
+    emit: Box<dyn Texture>,
+}
+
+impl Material for DiffuseLight {
+    fn scatter(&self, _r_in: Ray, _rec: &HitRecord) -> Option<(Color, Ray)> {
+        None
+    }
+
+    fn emitted(&self, u: f64, v: f64, p: Point3) -> Color {
+        self.emit.value(u, v, p)
     }
 }

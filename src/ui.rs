@@ -333,6 +333,11 @@ impl epi::App for TemplateApp {
                                 RenderScene::EarthGlobe,
                                 "Earth Globe",
                             );
+                            ui.radio_value(
+                                &mut self.config.scene,
+                                RenderScene::LightDemo,
+                                "Light Demo",
+                            );
                         });
                     });
                     ui.end_row();
@@ -400,7 +405,7 @@ impl epi::App for TemplateApp {
                         ui.end_row();
 
                         ui.add(
-                            egui::Slider::new(&mut self.config.image_height, 1..=500)
+                            egui::Slider::new(&mut self.config.image_height, 1..=1000)
                                 .suffix("px")
                                 .text("Image height"),
                         );

@@ -13,7 +13,7 @@ pub(crate) struct Sphere {
     pub time0: f64,
     pub time1: f64,
     pub radius: f64,
-    pub material: Box<dyn Material + Send + Sync>,
+    pub material: Box<dyn Material>,
 }
 
 impl Sphere {
