@@ -163,16 +163,10 @@ impl Default for TerminalSettings {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default)]
-struct DisplaySettings {
-    display_actual_size: bool,
-}
-
 #[derive(Debug)]
 pub struct TemplateApp {
     config: RenderConfig,
     data: Option<UiData>,
-    display: DisplaySettings,
 
     scene_to_camera: HashMap<RenderScene, CameraSettings>,
 
@@ -195,7 +189,6 @@ impl TemplateApp {
         TemplateApp {
             config,
             data: Default::default(),
-            display: Default::default(),
             scene_to_camera: HashMap::new(),
             terminal_display: Some(TerminalSettings::default()),
             render_command_tx,
@@ -363,7 +356,7 @@ impl epi::App for TemplateApp {
 
                     ui.collapsing("Graphical display options", |ui| {
                         ui.checkbox(
-                            &mut self.display.display_actual_size,
+                            &mut self.config.display_actual_size,
                             "Display render at actual 1:1 size",
                         );
                     });
@@ -542,14 +535,14 @@ impl epi::App for TemplateApp {
                 ui.add(
                     egui::ProgressBar::new(data.percent_complete())
                         .animate(!data.complete())
-                        .desired_width(if self.display.display_actual_size {
+                        .desired_width(if self.config.display_actual_size {
                             data.last_render_width as f32
                         } else {
                             ui.available_width()
                         }),
                 );
 
-                let image_sizing = if self.display.display_actual_size {
+                let image_sizing = if self.config.display_actual_size {
                     egui::Vec2::new(
                         data.last_render_width as f32,
                         data.last_render_height as f32,

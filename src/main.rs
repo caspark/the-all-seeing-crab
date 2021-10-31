@@ -265,6 +265,7 @@ struct RenderConfig {
     render_mode: RayColorMode,
     scene: RenderScene,
     output_filename: String,
+    display_actual_size: bool,
 }
 
 impl RenderConfig {
@@ -285,16 +286,10 @@ impl Default for RenderConfig {
             image_width,
             image_height: (image_width as f64 / aspect_ratio) as usize,
             samples_per_pixel: 100,
-            render_mode: {
-                // RayColorMode::BlockColor {
-                //     color: Color::new(255.0, 0.0, 0.0),
-                // }
-                // RayColorMode::ShadeNormal
-                // RayColorMode::Depth { max_t: 1.0 }
-                RayColorMode::Material { depth: 50 }
-            },
+            render_mode: { RayColorMode::Material { depth: 50 } },
             scene: Default::default(),
             output_filename: "target/output.png".to_owned(),
+            display_actual_size: true,
         }
     }
 }
