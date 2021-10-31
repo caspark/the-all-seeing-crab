@@ -18,7 +18,9 @@ use material::DiffuseLambertianTexture;
 use perlin::Perlin;
 use rgb::RGB8;
 use std::{env, f64::INFINITY};
-use texture::{CheckerTexture, ColorTexture, MarbleTexture, NoiseTexture, TurbulenceTexture};
+use texture::{
+    CheckerTexture, ColorTexture, ImageTexture, MarbleTexture, NoiseTexture, TurbulenceTexture,
+};
 
 use crate::{
     bvh_node::BvhNode,
@@ -38,6 +40,7 @@ enum RenderScene {
     ManyBalls,
     CheckersColliding,
     PerlinNoise,
+    EarthGlobe,
 }
 
 impl RenderScene {
@@ -67,26 +70,9 @@ impl RenderScene {
                 time0: 0.0,
                 time1: 1.0,
             },
-            RenderScene::CheckersColliding => CameraSettings {
-                look_from: Point3::new(13.0, 2.0, 3.0),
-                look_at: Point3::new(0.0, 0.0, 0.0),
-                vup: Vec3::new(0.0, 1.0, 0.0),
-                vfov: 20.0,
-                focus_dist: 10.0,
-                aperture: 0.1,
-                time0: 0.0,
-                time1: 0.0,
-            },
-            RenderScene::PerlinNoise => CameraSettings {
-                look_from: Point3::new(13.0, 2.0, 3.0),
-                look_at: Point3::new(0.0, 1.0, 0.0),
-                vup: Vec3::new(0.0, 1.0, 0.0),
-                vfov: 20.0,
-                focus_dist: 10.0,
-                aperture: 0.0,
-                time0: 0.0,
-                time1: 0.0,
-            },
+            RenderScene::CheckersColliding => CameraSettings::default(),
+            RenderScene::PerlinNoise => CameraSettings::default(),
+            RenderScene::EarthGlobe => CameraSettings::default(),
         }
     }
 
@@ -128,6 +114,22 @@ impl RenderScene {
 
                 BvhNode::new(world, 0.0, 0.0)
             }
+            RenderScene::EarthGlobe => {
+                let mut world = Vec::new();
+
+                let material = Box::new(DiffuseLambertianTexture::new(Box::new(
+                    ImageTexture::load_from_png("textures/earthmap.png")
+                        .expect("expected earthmap.png texture to exist in textures/"),
+                )));
+
+                world.push(Box::new(Sphere::stationary(
+                    Point3::new(0.0, 0.0, 0.0),
+                    2.0,
+                    material,
+                )) as Box<dyn Hittable>);
+
+                BvhNode::new(world, 0.0, 0.0)
+            }
         }
     }
 }
@@ -158,9 +160,9 @@ impl Default for CameraSettings {
             vup: Vec3::new(0.0, 1.0, 0.0),
             vfov: 20.0,
             focus_dist: 10.0,
-            aperture: 0.1,
+            aperture: 0.0,
             time0: 0.0,
-            time1: 1.0,
+            time1: 0.0,
         }
     }
 }

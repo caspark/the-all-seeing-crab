@@ -328,6 +328,11 @@ impl epi::App for TemplateApp {
                                 RenderScene::PerlinNoise,
                                 "Perlin Noise",
                             );
+                            ui.radio_value(
+                                &mut self.config.scene,
+                                RenderScene::EarthGlobe,
+                                "Earth Globe",
+                            );
                         });
                     });
                     ui.end_row();
