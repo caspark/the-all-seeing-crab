@@ -61,12 +61,12 @@ impl Material for DiffuseLambertian {
 }
 
 /// True lambertian reflection with arbitrary textures
-#[derive(Debug, Constructor)]
-pub(crate) struct DiffuseLambertianTexture {
-    albedo: Box<dyn crate::texture::Texture>,
+#[derive(Debug, Clone, Constructor)]
+pub(crate) struct DiffuseLambertianTexture<T: Texture + Clone> {
+    albedo: Box<T>,
 }
 
-impl Material for DiffuseLambertianTexture {
+impl<T: Texture + Clone> Material for DiffuseLambertianTexture<T> {
     fn scatter(&self, r_in: Ray, rec: &HitRecord) -> Option<(Color, Ray)> {
         let mut scatter_direction = rec.normal + Vec3::random_unit_vector();
 

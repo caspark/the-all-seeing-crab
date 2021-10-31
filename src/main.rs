@@ -15,7 +15,8 @@ mod ui;
 mod util;
 mod vec3;
 
-use aarect::XyRect;
+use aarect::{XyRect, XzRect, YzRect};
+use camera::CameraSettings;
 use material::{DiffuseLambertianTexture, DiffuseLight};
 use perlin::Perlin;
 use rgb::RGB8;
@@ -59,6 +60,7 @@ enum RenderScene {
     PerlinNoise,
     EarthGlobe,
     LightDemo,
+    CornelBox,
 }
 
 impl RenderScene {
@@ -91,10 +93,13 @@ impl RenderScene {
             RenderScene::CheckersColliding => CameraSettings::default(),
             RenderScene::PerlinNoise => CameraSettings::default(),
             RenderScene::EarthGlobe => CameraSettings::default(),
-            RenderScene::LightDemo => CameraSettings::new_from_looking(
-                Point3::new(26.0, 3.0, 6.0),
-                Point3::new(0.0, 2.0, 0.0),
-            ),
+            RenderScene::LightDemo => CameraSettings::default()
+                .look_from(Point3::new(26.0, 3.0, 6.0))
+                .look_at(Point3::new(0.0, 2.0, 0.0)),
+            RenderScene::CornelBox => CameraSettings::default()
+                .look_from(Point3::new(278.0, 278.0, -800.0))
+                .look_at(Point3::new(278.0, 278.0, 0.0))
+                .vfov(40.0),
         }
     }
 
@@ -195,6 +200,53 @@ impl RenderScene {
                     BvhNode::new(world, 0.0, 0.0)
                 },
             },
+            RenderScene::CornelBox => World {
+                background: Some(Color::new(0.0, 0.0, 0.0)),
+                node: {
+                    let mut world = Vec::new();
+
+                    let red = Box::new(DiffuseLambertianTexture::new(Box::new(
+                        ColorTexture::from_rgb(0.65, 0.05, 0.05),
+                    )));
+                    let white = Box::new(DiffuseLambertianTexture::new(Box::new(
+                        ColorTexture::from_rgb(0.73, 0.73, 0.73),
+                    )));
+                    let green = Box::new(DiffuseLambertianTexture::new(Box::new(
+                        ColorTexture::from_rgb(0.15, 0.45, 0.15),
+                    )));
+                    let light = Box::new(DiffuseLight::new(Box::new(ColorTexture::from_rgb(
+                        15.0, 15.0, 15.0,
+                    ))));
+
+                    world.push(Box::new(YzRect::new(0.0, 555.0, 0.0, 555.0, 555.0, green))
+                        as Box<dyn Hittable>);
+                    world.push(Box::new(YzRect::new(0.0, 555.0, 0.0, 555.0, 0.0, red))
+                        as Box<dyn Hittable>);
+                    world.push(
+                        Box::new(XzRect::new(213.0, 343.0, 227.0, 332.0, 554.0, light))
+                            as Box<dyn Hittable>,
+                    );
+                    world.push(Box::new(XzRect::new(
+                        0.0,
+                        555.0,
+                        0.0,
+                        555.0,
+                        0.0,
+                        white.clone(),
+                    )));
+                    world.push(Box::new(XzRect::new(
+                        0.0,
+                        555.0,
+                        0.0,
+                        555.0,
+                        555.0,
+                        white.clone(),
+                    )));
+                    world.push(Box::new(XyRect::new(0.0, 555.0, 0.0, 555.0, 555.0, white)));
+
+                    BvhNode::new(world, 0.0, 0.0)
+                },
+            },
         }
     }
 }
@@ -202,43 +254,6 @@ impl RenderScene {
 impl Default for RenderScene {
     fn default() -> Self {
         RenderScene::ThreeBody
-    }
-}
-
-#[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
-struct CameraSettings {
-    look_from: Point3,
-    look_at: Point3,
-    vup: Vec3,
-    vfov: f64,
-    focus_dist: f64,
-    aperture: f64,
-    time0: f64,
-    time1: f64,
-}
-
-impl CameraSettings {
-    fn new_from_looking(look_from: Point3, look_at: Point3) -> Self {
-        Self {
-            look_from,
-            look_at,
-            ..CameraSettings::default()
-        }
-    }
-}
-
-impl Default for CameraSettings {
-    fn default() -> Self {
-        Self {
-            look_from: Point3::new(13.0, 2.0, 3.0),
-            look_at: Point3::new(0.0, 0.0, 0.0),
-            vup: Vec3::new(0.0, 1.0, 0.0),
-            vfov: 20.0,
-            focus_dist: 10.0,
-            aperture: 0.0,
-            time0: 0.0,
-            time1: 0.0,
-        }
     }
 }
 

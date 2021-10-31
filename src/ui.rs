@@ -338,6 +338,11 @@ impl epi::App for TemplateApp {
                                 RenderScene::LightDemo,
                                 "Light Demo",
                             );
+                            ui.radio_value(
+                                &mut self.config.scene,
+                                RenderScene::CornelBox,
+                                "Cornel Box",
+                            );
                         });
                     });
                     ui.end_row();

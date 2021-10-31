@@ -2,8 +2,68 @@ use crate::{
     ray::Ray,
     util::{degrees_to_radians, random_double},
     vec3::{Point3, Vec3},
-    CameraSettings,
 };
+
+#[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
+pub(crate) struct CameraSettings {
+    pub look_from: Point3,
+    pub look_at: Point3,
+    pub vup: Vec3,
+    pub vfov: f64,
+    pub focus_dist: f64,
+    pub aperture: f64,
+    pub time0: f64,
+    pub time1: f64,
+}
+
+impl CameraSettings {
+    pub(crate) fn look_from(self, look_from: Point3) -> Self {
+        Self { look_from, ..self }
+    }
+
+    pub(crate) fn look_at(self, look_at: Point3) -> Self {
+        Self { look_at, ..self }
+    }
+
+    pub(crate) fn vup(self, vup: Vec3) -> Self {
+        Self { vup, ..self }
+    }
+
+    pub(crate) fn vfov(self, vfov: f64) -> Self {
+        Self { vfov, ..self }
+    }
+
+    pub(crate) fn focusing_on(self, focus_dist: f64, aperture: f64) -> Self {
+        Self {
+            focus_dist,
+            aperture,
+            ..self
+        }
+    }
+
+    pub(crate) fn time_range(self, time0: f64, time1: f64) -> Self {
+        Self {
+            time0,
+            time1,
+            ..self
+        }
+    }
+}
+
+impl Default for CameraSettings {
+    fn default() -> Self {
+        Self {
+            look_from: Point3::new(13.0, 2.0, 3.0),
+            look_at: Point3::new(0.0, 0.0, 0.0),
+            vup: Vec3::new(0.0, 1.0, 0.0),
+            vfov: 20.0,
+            focus_dist: 10.0,
+            aperture: 0.0,
+            time0: 0.0,
+            time1: 0.0,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Camera {

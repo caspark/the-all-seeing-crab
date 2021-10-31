@@ -31,14 +31,14 @@ impl Texture for ColorTexture {
 }
 
 /// A texture that is checkered; looks cool, but also useful for partially overlaying a debug texture.
-#[derive(Debug, Constructor)]
-pub(crate) struct CheckerTexture {
+#[derive(Debug, Clone, Constructor)]
+pub(crate) struct CheckerTexture<O: Texture, E: Texture> {
     scale: f64,
-    odd: Box<dyn Texture>,
-    even: Box<dyn Texture>,
+    odd: Box<O>,
+    even: Box<E>,
 }
 
-impl CheckerTexture {
+impl CheckerTexture<ColorTexture, ColorTexture> {
     pub(crate) fn from_colors(scale: f64, a: Color, b: Color) -> Self {
         Self {
             scale,
@@ -48,7 +48,7 @@ impl CheckerTexture {
     }
 }
 
-impl Texture for CheckerTexture {
+impl<O: Texture, E: Texture> Texture for CheckerTexture<O, E> {
     fn value(&self, u: f64, v: f64, p: Vec3) -> Color {
         let sines = (self.scale * p.x).sin() * (self.scale * p.y).sin() * (self.scale * p.z).sin();
         if sines < 0.0 {
@@ -60,7 +60,7 @@ impl Texture for CheckerTexture {
 }
 
 /// A texture that is colored based on the position that it is struck by a ray (in world coordinates).
-#[derive(Debug, Constructor)]
+#[derive(Debug, Constructor, Clone, Copy)]
 pub(crate) struct PositionTexture {}
 
 impl Texture for PositionTexture {
@@ -70,7 +70,7 @@ impl Texture for PositionTexture {
 }
 
 /// A texture which is colored based on a provided noise source.
-#[derive(Debug, Constructor)]
+#[derive(Debug, Constructor, Clone)]
 pub(crate) struct NoiseTexture {
     noise: Perlin,
     scale: f64,
@@ -84,7 +84,7 @@ impl Texture for NoiseTexture {
 
 /// A texture which is colored based on a provided noise source providing turbulence (multiple
 /// layers of noise).
-#[derive(Debug, Constructor)]
+#[derive(Debug, Constructor, Clone)]
 pub(crate) struct TurbulenceTexture {
     noise: Perlin,
     scale: f64,
@@ -98,7 +98,7 @@ impl Texture for TurbulenceTexture {
 }
 
 /// A procedural marble texture based on turbulated noise.
-#[derive(Debug, Constructor)]
+#[derive(Debug, Constructor, Clone)]
 pub(crate) struct MarbleTexture {
     noise: Perlin,
     scale: f64,
@@ -117,7 +117,7 @@ impl Texture for MarbleTexture {
 }
 
 /// A texture based on an image.
-#[derive(Debug, Constructor)]
+#[derive(Debug, Constructor, Clone)]
 pub(crate) struct ImageTexture {
     data: Vec<RGB8>,
     width: usize,
