@@ -1,4 +1,5 @@
 #![deny(clippy::all)] // make all clippy warnings into errors
+#![allow(clippy::many_single_char_names)]
 
 mod aabb;
 mod aarect;
@@ -179,9 +180,7 @@ impl RenderScene {
                         Point3::new(0.0, 2.0, 0.0),
                         2.0,
                         Box::new(DiffuseLambertianTexture::new(Box::new(MarbleTexture::new(
-                            noise.clone(),
-                            4.0,
-                            7,
+                            noise, 4.0, 7,
                         )))),
                     )) as Box<dyn Hittable>);
 

@@ -69,7 +69,6 @@ impl Sphere {
 }
 
 impl Hittable for Sphere {
-    #[allow(clippy::many_single_char_names)]
     fn hit(&self, r: Ray, t_min: f64, t_max: f64) -> Option<HitRecord> {
         let oc = r.origin() - self.center(r.time());
         let a = r.direction().length_squared();

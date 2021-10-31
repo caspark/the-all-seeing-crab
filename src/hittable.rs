@@ -21,7 +21,6 @@ pub(crate) struct HitRecord<'m> {
 }
 
 impl HitRecord<'_> {
-    #[allow(clippy::many_single_char_names)]
     pub(crate) fn new(
         t: f64,
         (u, v): (f64, f64),

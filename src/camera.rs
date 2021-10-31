@@ -16,6 +16,7 @@ pub(crate) struct CameraSettings {
     pub time1: f64,
 }
 
+#[allow(dead_code)]
 impl CameraSettings {
     pub(crate) fn look_from(self, look_from: Point3) -> Self {
         Self { look_from, ..self }

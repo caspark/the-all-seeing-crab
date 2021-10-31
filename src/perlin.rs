@@ -56,7 +56,6 @@ impl Perlin {
         accum.abs()
     }
 
-    #[allow(clippy::many_single_char_names)]
     pub(crate) fn sample_noise(&self, p: Point3) -> f64 {
         let mut u = p.x - p.x.floor();
         let mut v = p.y - p.y.floor();
