@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use crate::{
     hittable::HitRecord,
     ray::Ray,
@@ -16,13 +18,13 @@ pub(crate) trait Material: std::fmt::Debug + Send + Sync {
     }
 }
 
-impl Material for &dyn Material {
+impl<M: Material + ?Sized, T: Deref<Target = M> + Send + Sync + std::fmt::Debug> Material for T {
     fn scatter(&self, r_in: Ray, rec: &HitRecord) -> Option<(Color, Ray)> {
-        (**self).scatter(r_in, rec)
+        self.deref().scatter(r_in, rec)
     }
 
     fn emitted(&self, u: f64, v: f64, p: Point3) -> Color {
-        self.emitted(u, v, p)
+        self.deref().emitted(u, v, p)
     }
 }
 
