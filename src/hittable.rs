@@ -51,3 +51,49 @@ pub(crate) trait Hittable: std::fmt::Debug + Sync + Send {
     fn hit(&self, r: Ray, t_min: f64, t_max: f64) -> Option<HitRecord>;
     fn bounding_box(&self, time0: f64, time1: f64) -> Option<Aabb>;
 }
+
+#[derive(Debug, Default)]
+pub(crate) struct HittableList {
+    pub objects: Vec<Box<dyn Hittable>>,
+}
+
+impl HittableList {
+    pub(crate) fn new() -> Self {
+        Self::default()
+    }
+
+    pub(crate) fn add(&mut self, object: Box<dyn Hittable>) {
+        self.objects.push(object)
+    }
+}
+
+impl Hittable for HittableList {
+    fn hit(&self, r: Ray, t_min: f64, t_max: f64) -> Option<HitRecord> {
+        let mut best_hit: Option<HitRecord> = None;
+
+        for object in self.objects.iter() {
+            let new_t_max = best_hit.as_ref().map_or(t_max, |h| h.t);
+            if let Some(new_hit) = object.hit(r, t_min, new_t_max) {
+                best_hit = Some(new_hit);
+            }
+        }
+
+        best_hit
+    }
+
+    fn bounding_box(&self, time0: f64, time1: f64) -> Option<Aabb> {
+        let mut result = None;
+        for object in self.objects.iter() {
+            if let Some(new_box) = object.bounding_box(time0, time1) {
+                result = Some(if let Some(existing) = result {
+                    Aabb::surrounding_box(existing, new_box)
+                } else {
+                    new_box
+                })
+            } else {
+                return None;
+            }
+        }
+        result
+    }
+}

@@ -8,7 +8,7 @@ use crate::{
     vec3::{Point3, Vec3},
 };
 
-#[derive(Debug, Constructor)]
+#[derive(Debug)]
 pub(crate) struct XyRect {
     x0: f64,
     x1: f64,
@@ -16,6 +16,26 @@ pub(crate) struct XyRect {
     y1: f64,
     k: f64,
     material: Box<dyn Material>,
+}
+
+impl XyRect {
+    pub(crate) fn new(
+        x0: f64,
+        x1: f64,
+        y0: f64,
+        y1: f64,
+        k: f64,
+        material: Box<dyn Material>,
+    ) -> Self {
+        Self {
+            x0,
+            x1,
+            y0,
+            y1,
+            k,
+            material,
+        }
+    }
 }
 
 impl Hittable for XyRect {

@@ -16,6 +16,16 @@ pub(crate) trait Material: std::fmt::Debug + Send + Sync {
     }
 }
 
+impl Material for &dyn Material {
+    fn scatter(&self, r_in: Ray, rec: &HitRecord) -> Option<(Color, Ray)> {
+        (**self).scatter(r_in, rec)
+    }
+
+    fn emitted(&self, u: f64, v: f64, p: Point3) -> Color {
+        self.emitted(u, v, p)
+    }
+}
+
 /// Bias of having light bounce towards the normal
 #[derive(Debug, Clone, Copy, Constructor)]
 pub(crate) struct DiffuseHack {

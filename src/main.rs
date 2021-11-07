@@ -3,6 +3,7 @@
 
 mod aabb;
 mod aarect;
+mod box3d;
 mod bvh_node;
 mod camera;
 mod color;
@@ -10,6 +11,7 @@ mod hittable;
 mod material;
 mod perlin;
 mod ray;
+mod sample;
 mod sphere;
 mod texture;
 mod ui;
@@ -17,6 +19,7 @@ mod util;
 mod vec3;
 
 use aarect::{XyRect, XzRect, YzRect};
+use box3d::Box3D;
 use camera::CameraSettings;
 use material::{DiffuseLambertianTexture, DiffuseLight};
 use perlin::Perlin;
@@ -217,8 +220,11 @@ impl RenderScene {
                         15.0, 15.0, 15.0,
                     ))));
 
+                    // sides of the box
+                    // left side
                     world.push(Box::new(YzRect::new(0.0, 555.0, 0.0, 555.0, 555.0, green))
                         as Box<dyn Hittable>);
+                    // right side
                     world.push(Box::new(YzRect::new(0.0, 555.0, 0.0, 555.0, 0.0, red))
                         as Box<dyn Hittable>);
                     world.push(
@@ -241,7 +247,25 @@ impl RenderScene {
                         555.0,
                         white.clone(),
                     )));
-                    world.push(Box::new(XyRect::new(0.0, 555.0, 0.0, 555.0, 555.0, white)));
+                    world.push(Box::new(XyRect::new(
+                        0.0,
+                        555.0,
+                        0.0,
+                        555.0,
+                        555.0,
+                        white.clone(),
+                    )));
+
+                    // world.push(Box::new(Box3D::new(
+                    //     Point3::new(130.0, 0.0, 65.0),
+                    //     Point3::new(295.0, 165.0, 230.0),
+                    //     &*white.clone(),
+                    // )) as Box<dyn Hittable>);
+                    // world.push(Box::new(Box3D::new(
+                    //     Point3::new(265.0, 0.0, 295.0),
+                    //     Point3::new(430.0, 330.0, 460.0),
+                    //     &*white,
+                    // )) as Box<dyn Hittable>);
 
                     BvhNode::new(world, 0.0, 0.0)
                 },
