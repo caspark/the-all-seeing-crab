@@ -1,6 +1,14 @@
 # The All Seeing Crab
 
-is a raytracer written in Rust.
+is a raytracer written in Rust, with the core ray tracing mechanics adhering fairly closely to [Ray Tracing in One Weekend](https://raytracing.github.io/).
+
+The primary differences from the "original" are:
+
+1. It's written in Rust (obviously) instead of C++
+2. Support for various debug rendering modes is added (e.g. render normals, depth testing, etc)
+3. A few more rendering scenes have been added
+4. Terminal progress display: the scene is incrementally rendered in ascii-art-lite in your terminal as it is computed
+5. A GUI is provided for tweaking various camera, scene, and other configuration settings (using [egui](https://github.com/emilk/egui)), with the resulting image being displayed in the GUI too.
 
 ## Prereqs
 
@@ -19,6 +27,6 @@ Run `./run.sh output.png` and the output of the render will be saved to `output.
 ## Developing
 
 1. Run `./watch.sh`
-2. Open `target/output.png` in an editor split, so you can see it auto-update
+2. Optionally, open `target/output.png` in an editor split, so you can see it auto-update
 
 To run tests, run `cargo test` (or `cargo watch`) as usual.
