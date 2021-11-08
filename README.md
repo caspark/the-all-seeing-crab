@@ -28,11 +28,11 @@ If you are running this under WSL with an X11 server like vcxsrv, make sure:
 
 ## Running
 
-Run `./run.sh output.png` and the output of the render will be saved to `output.png`
+Run `./run.sh` and the output of the render will be displayed & saved to `target/output.png`.
 
 ## Developing
 
 1. Run `./watch.sh`
 2. Optionally, open `target/output.png` in an editor split, so you can see it auto-update
 
-To run tests, run `cargo test` (or `cargo watch`) as usual.
+To run (very very minimal) tests, run `cargo test` (or `cargo watch`) as usual.
