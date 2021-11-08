@@ -478,13 +478,14 @@ impl RenderScene {
                             Box::new(ColorTexture::new(Color::new(0.2, 0.4, 0.9))),
                             0.2,
                         )));
-                        let boundary2 = Box::new(Sphere::stationary(
-                            Point3::new(0.0, 0.0, 0.0),
-                            5000.0,
-                            Box::new(Dielectric::new(1.5)),
-                        ));
+
+                        // mist over the whole render
                         world.push(Box::new(ConstantMedium::new(
-                            boundary2,
+                            Box::new(Sphere::stationary(
+                                Point3::new(0.0, 0.0, 0.0),
+                                5000.0,
+                                Box::new(Dielectric::new(1.5)),
+                            )),
                             Box::new(ColorTexture::new(Color::new(1.0, 1.0, 1.0))),
                             0.0001,
                         )));
@@ -498,6 +499,26 @@ impl RenderScene {
                                     .expect("expected earthmap.png texture to exist in textures/"),
                             ))),
                         )));
+
+                        // sphere with perlin noise texture
+                        world.push(Box::new(Sphere::stationary(
+                            Point3::new(220.0, 280.0, 300.0),
+                            80.0,
+                            Box::new(DiffuseLambertianTexture::new(Box::new(
+                                TurbulenceTexture::new(Perlin::new(), 0.25, 5),
+                            ))),
+                        )));
+
+                        // sphere with marble texture
+                        // world.push(Box::new(Sphere::stationary(
+                        //     Point3::new(-120.0, 180.0, 400.0),
+                        //     120.0,
+                        //     Box::new(DiffuseLambertianTexture::new(Box::new(MarbleTexture::new(
+                        //         Perlin::new(),
+                        //         0.01,
+                        //         5,
+                        //     )))),
+                        // )));
 
                         // a cube constructed of many small spheres
                         let mut cube_pieces: Vec<Box<dyn Hittable>> = Vec::new();
