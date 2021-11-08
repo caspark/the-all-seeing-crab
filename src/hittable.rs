@@ -2,6 +2,7 @@ use crate::{
     aabb::Aabb,
     material::Material,
     ray::Ray,
+    util::degrees_to_radians,
     vec3::{Point3, Vec3},
 };
 
@@ -123,5 +124,86 @@ impl<H: Hittable> Hittable for Translate<H> {
         self.obj
             .bounding_box(time0, time1)
             .map(|b| Aabb::new(b.min() + self.offset, b.max() + self.offset))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct RotateY<H: Hittable> {
+    obj: H,
+    sin_theta: f64,
+    cos_theta: f64,
+    bounding_box: Option<Aabb>,
+}
+
+impl<H: Hittable> RotateY<H> {
+    pub(crate) fn new(angle: f64, obj: H) -> Self {
+        let radians = degrees_to_radians(angle);
+        let sin_theta = radians.sin();
+        let cos_theta = radians.cos();
+
+        let mut min = Vec3::new(std::f64::MAX, std::f64::MAX, std::f64::MAX);
+        let mut max = Vec3::new(std::f64::MIN, std::f64::MIN, std::f64::MIN);
+
+        Self {
+            bounding_box: {
+                obj.bounding_box(0.0, 1.0).map(|bbox| {
+                    for i in 0..2 {
+                        for j in 0..2 {
+                            for k in 0..2 {
+                                let x = i as f64 * bbox.max().x + (1 - i) as f64 * bbox.min().x;
+                                let y = j as f64 * bbox.max().y + (1 - j) as f64 * bbox.min().y;
+                                let z = k as f64 * bbox.max().z + (1 - k) as f64 * bbox.min().z;
+
+                                let newx = cos_theta * x + sin_theta * z;
+                                let newz = -sin_theta * x + cos_theta * z;
+
+                                let t = Vec3::new(newx, y, newz);
+                                for c in 0..3 {
+                                    min[c] = min[c].min(t[c]);
+                                    max[c] = max[c].max(t[c]);
+                                }
+                            }
+                        }
+                    }
+                    Aabb::new(min, max)
+                })
+            },
+            obj,
+            sin_theta,
+            cos_theta,
+        }
+    }
+}
+
+impl<H: Hittable> Hittable for RotateY<H> {
+    fn hit(&self, r: Ray, t_min: f64, t_max: f64) -> Option<HitRecord> {
+        let mut origin = r.origin();
+        let mut direction = r.direction();
+
+        origin.x = self.cos_theta * r.origin().x - self.sin_theta * r.origin().z;
+        origin.z = self.sin_theta * r.origin().x + self.cos_theta * r.origin().z;
+
+        direction.x = self.cos_theta * r.direction().x - self.sin_theta * r.direction().z;
+        direction.z = self.sin_theta * r.direction().x + self.cos_theta * r.direction().z;
+
+        let rotated_r = Ray::new(origin, direction, Some(r.time()));
+
+        self.obj.hit(rotated_r, t_min, t_max).map(|rec| HitRecord {
+            p: Vec3::new(
+                self.cos_theta * rec.p.x + self.sin_theta * rec.p.z,
+                rec.p.y,
+                -self.sin_theta * rec.p.x + self.cos_theta * rec.p.z,
+            ),
+            normal: Vec3::new(
+                self.cos_theta * rec.normal.x + self.sin_theta * rec.normal.z,
+                rec.normal.y,
+                -self.sin_theta * rec.normal.x + self.cos_theta * rec.normal.z,
+            ),
+            ..rec
+        })
+    }
+
+    fn bounding_box(&self, _time0: f64, _time1: f64) -> Option<Aabb> {
+        self.bounding_box
     }
 }
