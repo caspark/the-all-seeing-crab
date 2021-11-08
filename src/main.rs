@@ -7,6 +7,7 @@ mod box3d;
 mod bvh_node;
 mod camera;
 mod color;
+mod constant_medium;
 mod hittable;
 mod material;
 mod perlin;
@@ -20,6 +21,7 @@ mod vec3;
 use aarect::{XyRect, XzRect, YzRect};
 use box3d::Box3D;
 use camera::CameraSettings;
+use constant_medium::ConstantMedium;
 use hittable::{RotateY, Translate};
 use material::{DiffuseLambertianTexture, DiffuseLight};
 use perlin::Perlin;
@@ -65,6 +67,7 @@ enum RenderScene {
     EarthGlobe,
     LightDemo,
     CornelBox,
+    CornelSmokeBox,
 }
 
 impl RenderScene {
@@ -100,7 +103,7 @@ impl RenderScene {
             RenderScene::LightDemo => CameraSettings::default()
                 .look_from(Point3::new(26.0, 3.0, 6.0))
                 .look_at(Point3::new(0.0, 2.0, 0.0)),
-            RenderScene::CornelBox => CameraSettings::default()
+            RenderScene::CornelBox | RenderScene::CornelSmokeBox => CameraSettings::default()
                 .look_from(Point3::new(278.0, 278.0, -800.0))
                 .look_at(Point3::new(278.0, 278.0, 0.0))
                 .vfov(40.0),
@@ -111,7 +114,32 @@ impl RenderScene {
         match self {
             RenderScene::ThreeBody => create_fixed_scene().into(),
             RenderScene::ManyBalls => create_random_scene().into(),
-            RenderScene::CheckersColliding => create_checkers_colliding_scene().into(),
+            RenderScene::CheckersColliding => {
+                let mut world: Vec<Box<dyn Hittable>> = Vec::new();
+
+                let light = Color::new(0.2, 0.3, 0.1);
+                let dark = Color::new(0.9, 0.9, 0.9);
+
+                let material_top = Box::new(DiffuseLambertianTexture::new(Box::new(
+                    CheckerTexture::from_colors(10.0, light, dark),
+                )));
+                let material_bottom = Box::new(DiffuseLambertianTexture::new(Box::new(
+                    CheckerTexture::from_colors(10.0, dark, light),
+                )));
+
+                world.push(Box::new(Sphere::stationary(
+                    Point3::new(0.0, 10.0, 0.0),
+                    10.0,
+                    material_top,
+                )));
+                world.push(Box::new(Sphere::stationary(
+                    Point3::new(0.0, -10.0, 0.0),
+                    10.0,
+                    material_bottom,
+                )));
+
+                BvhNode::new(world, 0.0, 0.0).into()
+            }
             RenderScene::PerlinNoise => {
                 let mut world = Vec::new();
 
@@ -205,57 +233,23 @@ impl RenderScene {
             RenderScene::CornelBox => World {
                 background: Some(Color::new(0.0, 0.0, 0.0)),
                 node: {
-                    let mut world = Vec::new();
+                    let mut world: Vec<Box<dyn Hittable>> = cornell_box_walls().into();
 
-                    let red = Box::new(DiffuseLambertianTexture::new(Box::new(
-                        ColorTexture::from_rgb(0.65, 0.05, 0.05),
+                    // light
+                    world.push(Box::new(XzRect::new(
+                        213.0,
+                        343.0,
+                        227.0,
+                        332.0,
+                        554.0,
+                        Box::new(DiffuseLight::new(Box::new(ColorTexture::from_rgb(
+                            15.0, 15.0, 15.0,
+                        )))),
                     )));
+
                     let white = Box::new(DiffuseLambertianTexture::new(Box::new(
                         ColorTexture::from_rgb(0.73, 0.73, 0.73),
                     )));
-                    let green = Box::new(DiffuseLambertianTexture::new(Box::new(
-                        ColorTexture::from_rgb(0.15, 0.45, 0.15),
-                    )));
-                    let light = Box::new(DiffuseLight::new(Box::new(ColorTexture::from_rgb(
-                        15.0, 15.0, 15.0,
-                    ))));
-
-                    // sides of the box
-                    // left side
-                    world.push(Box::new(YzRect::new(0.0, 555.0, 0.0, 555.0, 555.0, green))
-                        as Box<dyn Hittable>);
-                    // right side
-                    world.push(Box::new(YzRect::new(0.0, 555.0, 0.0, 555.0, 0.0, red))
-                        as Box<dyn Hittable>);
-                    world.push(
-                        Box::new(XzRect::new(213.0, 343.0, 227.0, 332.0, 554.0, light))
-                            as Box<dyn Hittable>,
-                    );
-                    world.push(Box::new(XzRect::new(
-                        0.0,
-                        555.0,
-                        0.0,
-                        555.0,
-                        0.0,
-                        white.clone(),
-                    )));
-                    world.push(Box::new(XzRect::new(
-                        0.0,
-                        555.0,
-                        0.0,
-                        555.0,
-                        555.0,
-                        white.clone(),
-                    )));
-                    world.push(Box::new(XyRect::new(
-                        0.0,
-                        555.0,
-                        0.0,
-                        555.0,
-                        555.0,
-                        white.clone(),
-                    )));
-
                     world.push(Box::new(Translate::new(
                         Point3::new(265.0, 0.0, 295.0),
                         RotateY::new(
@@ -282,8 +276,108 @@ impl RenderScene {
                     BvhNode::new(world, 0.0, 0.0)
                 },
             },
+            RenderScene::CornelSmokeBox => World {
+                background: Some(Color::new(0.0, 0.0, 0.0)),
+                node: {
+                    let mut world: Vec<Box<dyn Hittable>> = cornell_box_walls().into();
+
+                    // light (4x larger but half as bright as regular Cornell box)
+                    world.push(Box::new(XzRect::new(
+                        113.0,
+                        443.0,
+                        127.0,
+                        432.0,
+                        554.0,
+                        Box::new(DiffuseLight::new(Box::new(ColorTexture::from_rgb(
+                            7.0, 7.0, 7.0,
+                        )))),
+                    )));
+
+                    let white = Box::new(DiffuseLambertianTexture::new(Box::new(
+                        ColorTexture::from_rgb(0.73, 0.73, 0.73),
+                    )));
+                    world.push(Box::new(Translate::new(
+                        Point3::new(265.0, 0.0, 295.0),
+                        RotateY::new(
+                            15.0,
+                            ConstantMedium::new(
+                                Box::new(Box3D::new(
+                                    Point3::new(0.0, 0.0, 0.0),
+                                    Point3::new(165.0, 330.0, 165.0),
+                                    white.clone(),
+                                )),
+                                Box::new(ColorTexture::new(Color::new(0.0, 0.0, 0.0))),
+                                0.01,
+                            ),
+                        ),
+                    )));
+                    world.push(Box::new(RotateY::new(
+                        -18.0,
+                        Translate::new(
+                            Vec3::new(130.0, 0.0, 65.0),
+                            ConstantMedium::new(
+                                Box::new(Box3D::new(
+                                    Point3::new(0.0, 0.0, 0.0),
+                                    Point3::new(165.0, 165.0, 165.0),
+                                    white.clone(),
+                                )),
+                                Box::new(ColorTexture::new(Color::new(1.0, 1.0, 1.0))),
+                                0.01,
+                            ),
+                        ),
+                    )));
+
+                    BvhNode::new(world, 0.0, 0.0)
+                },
+            },
         }
     }
+}
+
+#[must_use]
+fn cornell_box_walls() -> Vec<Box<dyn Hittable>> {
+    let red = Box::new(DiffuseLambertianTexture::new(Box::new(
+        ColorTexture::from_rgb(0.65, 0.05, 0.05),
+    )));
+    let white = Box::new(DiffuseLambertianTexture::new(Box::new(
+        ColorTexture::from_rgb(0.73, 0.73, 0.73),
+    )));
+    let green = Box::new(DiffuseLambertianTexture::new(Box::new(
+        ColorTexture::from_rgb(0.12, 0.45, 0.15),
+    )));
+    let mut world: Vec<Box<dyn Hittable>> = Vec::new();
+
+    // sides of the box
+    // left side
+    world.push(Box::new(YzRect::new(0.0, 555.0, 0.0, 555.0, 555.0, green)));
+    // right side
+    world.push(Box::new(YzRect::new(0.0, 555.0, 0.0, 555.0, 0.0, red)));
+    world.push(Box::new(XzRect::new(
+        0.0,
+        555.0,
+        0.0,
+        555.0,
+        0.0,
+        white.clone(),
+    )));
+    world.push(Box::new(XzRect::new(
+        0.0,
+        555.0,
+        0.0,
+        555.0,
+        555.0,
+        white.clone(),
+    )));
+    world.push(Box::new(XyRect::new(
+        0.0,
+        555.0,
+        0.0,
+        555.0,
+        555.0,
+        white.clone(),
+    )));
+
+    world
 }
 
 impl Default for RenderScene {
@@ -435,7 +529,7 @@ fn print_usage_then_die(exe: &str, error: &str) {
 }
 
 fn create_fixed_scene() -> BvhNode {
-    let mut world = Vec::new();
+    let mut world: Vec<Box<dyn Hittable>> = Vec::new();
 
     let material_ground = Box::new(DiffuseLambertianTexture::new(Box::new(
         CheckerTexture::from_colors(10.0, Color::new(0.2, 0.3, 0.1), Color::new(0.9, 0.9, 0.9)),
@@ -450,40 +544,40 @@ fn create_fixed_scene() -> BvhNode {
         Point3::new(0.0, -100.5, -1.0),
         100.0,
         material_ground,
-    )) as Box<dyn Hittable>);
+    )));
     world.push(Box::new(Sphere::stationary(
         Point3::new(0.0, 0.0, -1.0),
         0.5,
         material_center,
-    )) as Box<dyn Hittable>);
+    )));
     world.push(Box::new(Sphere::stationary(
         Point3::new(-1.0, 0.0, -1.0),
         0.5,
         material_left.clone(),
-    )) as Box<dyn Hittable>);
+    )));
     world.push(Box::new(Sphere::stationary(
         Point3::new(-1.0, 0.0, -1.0),
         -0.45,
         material_left,
-    )) as Box<dyn Hittable>);
+    )));
     world.push(Box::new(Sphere::stationary(
         Point3::new(1.0, 0.0, -1.0),
         0.5,
         material_right,
-    )) as Box<dyn Hittable>);
+    )));
 
     BvhNode::new(world, 0.0, 0.0)
 }
 
 fn create_random_scene() -> BvhNode {
-    let mut world = Vec::new();
+    let mut world: Vec<Box<dyn Hittable>> = Vec::new();
 
     let material_ground = Box::new(DiffuseLambertian::new(Color::new(0.8, 0.8, 0.0)));
     world.push(Box::new(Sphere::stationary(
         Point3::new(0.0, -1000.0, 0.0),
         1000.0,
         material_ground,
-    )) as Box<dyn Hittable>);
+    )));
 
     for a in -11..11 {
         for b in -11..11 {
@@ -509,11 +603,10 @@ fn create_random_scene() -> BvhNode {
                     Box::new(Dielectric::new(1.5)) // 1.5 is glass
                 };
                 world.push(if choose_mat < 0.4 {
-                    Box::new(Sphere::stationary(center, 0.2, material)) as Box<dyn Hittable>
+                    Box::new(Sphere::stationary(center, 0.2, material))
                 } else {
                     let center2 = center + Vec3::new(0.0, random_double(0.0, 0.5), 0.0);
                     Box::new(Sphere::moving(center, center2, 0.0, 1.0, 0.2, material))
-                        as Box<dyn Hittable>
                 });
             }
         }
@@ -537,33 +630,6 @@ fn create_random_scene() -> BvhNode {
     )));
 
     BvhNode::new(world, 0.0, 1.0)
-}
-
-fn create_checkers_colliding_scene() -> BvhNode {
-    let mut world = Vec::new();
-
-    let light = Color::new(0.2, 0.3, 0.1);
-    let dark = Color::new(0.9, 0.9, 0.9);
-
-    let material_top = Box::new(DiffuseLambertianTexture::new(Box::new(
-        CheckerTexture::from_colors(10.0, light, dark),
-    )));
-    let material_bottom = Box::new(DiffuseLambertianTexture::new(Box::new(
-        CheckerTexture::from_colors(10.0, dark, light),
-    )));
-
-    world.push(Box::new(Sphere::stationary(
-        Point3::new(0.0, 10.0, 0.0),
-        10.0,
-        material_top,
-    )) as Box<dyn Hittable>);
-    world.push(Box::new(Sphere::stationary(
-        Point3::new(0.0, -10.0, 0.0),
-        10.0,
-        material_bottom,
-    )) as Box<dyn Hittable>);
-
-    BvhNode::new(world, 0.0, 0.0)
 }
 
 fn run_render_loop(

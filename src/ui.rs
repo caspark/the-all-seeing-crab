@@ -336,6 +336,11 @@ impl epi::App for TemplateApp {
                                 RenderScene::CornelBox,
                                 "Cornel Box",
                             );
+                            ui.radio_value(
+                                &mut self.config.scene,
+                                RenderScene::CornelSmokeBox,
+                                "Cornel Smoke Box",
+                            );
                         });
                     });
                     ui.end_row();
