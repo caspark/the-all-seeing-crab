@@ -97,3 +97,31 @@ impl Hittable for HittableList {
         result
     }
 }
+
+#[derive(Clone, Debug)]
+pub(crate) struct Translate<H: Hittable> {
+    offset: Vec3,
+    obj: H,
+}
+
+impl<H: Hittable> Translate<H> {
+    pub(crate) fn new(offset: Vec3, obj: H) -> Self {
+        Self { offset, obj }
+    }
+}
+
+impl<H: Hittable> Hittable for Translate<H> {
+    fn hit(&self, r: Ray, t_min: f64, t_max: f64) -> Option<HitRecord> {
+        let moved_r = Ray::new(r.origin() - self.offset, r.direction(), Some(r.time()));
+        self.obj.hit(moved_r, t_min, t_max).map(|h| HitRecord {
+            p: h.p + self.offset,
+            ..h
+        })
+    }
+
+    fn bounding_box(&self, time0: f64, time1: f64) -> Option<Aabb> {
+        self.obj
+            .bounding_box(time0, time1)
+            .map(|b| Aabb::new(b.min() + self.offset, b.max() + self.offset))
+    }
+}
