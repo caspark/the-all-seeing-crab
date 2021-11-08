@@ -2,4 +2,4 @@
 
 set -eux
 
-exec cargo watch --shell "./run-debug.sh target/output.png"
+exec cargo watch --shell "./run-debug.sh"

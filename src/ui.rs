@@ -158,7 +158,7 @@ impl Default for TerminalSettings {
     fn default() -> Self {
         Self {
             desired_width: 80,
-            desired_height: 15,
+            desired_height: 22,
         }
     }
 }
@@ -178,12 +178,10 @@ pub struct TemplateApp {
 
 impl TemplateApp {
     pub(crate) fn new(
-        output_filename: &str,
         render_command_tx: flume::Sender<RenderCommand>,
         render_result_rx: flume::Receiver<RenderResult>,
     ) -> Self {
         let config = RenderConfig {
-            output_filename: output_filename.to_owned(),
             ..Default::default()
         };
         TemplateApp {

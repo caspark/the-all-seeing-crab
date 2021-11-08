@@ -22,7 +22,7 @@ mod vec3;
 use camera::CameraSettings;
 use rgb::RGB8;
 use scenes::RenderScene;
-use std::{env, f64::INFINITY};
+use std::f64::INFINITY;
 
 use crate::{
     bvh_node::BvhNode,
@@ -152,16 +152,6 @@ fn ray_color(r: Ray, background: Option<Color>, world: &dyn Hittable, mode: RayC
 }
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
-    match args[..] {
-        [] => panic!("Could not extract executable name as first arg"),
-        [ref exe] => print_usage_then_die(exe, "output file expected as first argument"),
-        [_, ref image_filename] => run(image_filename),
-        [ref exe, _, ..] => print_usage_then_die(exe, "Max one argument expected"),
-    };
-}
-
-fn run(image_filename: &str) {
     let (command_tx, command_rx) = flume::unbounded::<RenderCommand>();
     let (result_tx, result_rx) = flume::unbounded::<RenderResult>();
 
@@ -177,17 +167,9 @@ fn run(image_filename: &str) {
             });
     }));
 
-    let app = ui::TemplateApp::new(image_filename, command_tx, result_rx);
+    let app = ui::TemplateApp::new(command_tx, result_rx);
     let native_options = eframe::NativeOptions::default();
     eframe::run_native(Box::new(app), native_options);
-}
-
-fn print_usage_then_die(exe: &str, error: &str) {
-    eprintln!("Error: {}", error);
-    eprintln!("Usage:");
-    eprintln!("    {} OUTPUT_FILE", exe);
-
-    std::process::exit(1);
 }
 
 fn run_render_loop(
