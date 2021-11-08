@@ -28,6 +28,7 @@ pub(crate) enum RenderScene {
     LightDemo,
     CornelBox,
     CornelSmokeBox,
+    FinalScene,
 }
 
 impl RenderScene {
@@ -67,6 +68,11 @@ impl RenderScene {
                 .look_from(Point3::new(278.0, 278.0, -800.0))
                 .look_at(Point3::new(278.0, 278.0, 0.0))
                 .vfov(40.0),
+            RenderScene::FinalScene => CameraSettings::default()
+                .look_from(Point3::new(478.0, 278.0, -600.0))
+                .look_at(Point3::new(278.0, 278.0, 0.0))
+                .vfov(40.0)
+                .time_range(0.0, 1.0),
         }
     }
 
@@ -394,6 +400,123 @@ impl RenderScene {
                     BvhNode::new(world, 0.0, 0.0)
                 },
             },
+            RenderScene::FinalScene => {
+                World {
+                    background: Some(Color::new(0.0, 0.0, 0.0)),
+                    node: {
+                        let mut world: Vec<Box<dyn Hittable>> = Vec::new();
+
+                        let ground = DiffuseLambertian::new(Color::new(0.48, 0.83, 0.53));
+
+                        let boxes_per_side = 20;
+                        for i in 0..boxes_per_side {
+                            for j in 0..boxes_per_side {
+                                let w = 100.0;
+                                let x0 = -1000.0 + i as f64 * w;
+                                let z0 = -1000.0 + j as f64 * w;
+                                let y0 = 0.0;
+                                let x1 = x0 + w;
+                                let y1 = 100.0 * (random_double(0.0, 1.0) + 0.01);
+                                let z1 = z0 + w;
+
+                                world.push(Box::new(Box3D::new(
+                                    Point3::new(x0, y0, z0),
+                                    Point3::new(x1, y1, z1),
+                                    ground,
+                                )));
+                            }
+                        }
+
+                        let light = Box::new(DiffuseLight::new(Box::new(ColorTexture::from_rgb(
+                            7.0, 7.0, 7.0,
+                        ))));
+                        world.push(Box::new(XzRect::new(
+                            123.0, 423.0, 147.0, 412.0, 554.0, light,
+                        )));
+
+                        // motion blur sphere
+                        let center1 = Point3::new(400.0, 400.0, 200.0);
+                        let center2 = center1 + Vec3::new(30.0, 0.0, 0.0);
+                        let moving_sphere_material =
+                            Box::new(DiffuseLambertian::new(Color::new(0.7, 0.3, 0.1)));
+                        world.push(Box::new(Sphere::moving(
+                            center1,
+                            center2,
+                            0.0,
+                            1.0,
+                            50.0,
+                            moving_sphere_material,
+                        )));
+
+                        // glass sphere
+                        world.push(Box::new(Sphere::stationary(
+                            Point3::new(260.0, 150.0, 45.0),
+                            50.0,
+                            Box::new(Dielectric::new(1.5)),
+                        )));
+                        // metal sphere
+                        world.push(Box::new(Sphere::stationary(
+                            Point3::new(0.0, 150.0, 145.0),
+                            50.0,
+                            Box::new(Metal::new(Color::new(0.8, 0.8, 0.9), 10.0)),
+                        )));
+
+                        // sphere with subsurface scattering
+                        let boundary_pos = Point3::new(360.0, 150.0, 145.0);
+                        let boundary_radius = 70.0;
+                        world.push(Box::new(Sphere::stationary(
+                            boundary_pos,
+                            boundary_radius,
+                            Box::new(Dielectric::new(1.5)),
+                        )));
+                        world.push(Box::new(ConstantMedium::new(
+                            Box::new(Sphere::stationary(
+                                boundary_pos,
+                                boundary_radius,
+                                Box::new(Dielectric::new(1.5)),
+                            )),
+                            Box::new(ColorTexture::new(Color::new(0.2, 0.4, 0.9))),
+                            0.2,
+                        )));
+                        let boundary2 = Box::new(Sphere::stationary(
+                            Point3::new(0.0, 0.0, 0.0),
+                            5000.0,
+                            Box::new(Dielectric::new(1.5)),
+                        ));
+                        world.push(Box::new(ConstantMedium::new(
+                            boundary2,
+                            Box::new(ColorTexture::new(Color::new(1.0, 1.0, 1.0))),
+                            0.0001,
+                        )));
+
+                        // globe with earth texture
+                        world.push(Box::new(Sphere::stationary(
+                            Point3::new(400.0, 200.0, 400.0),
+                            100.0,
+                            Box::new(DiffuseLambertianTexture::new(Box::new(
+                                ImageTexture::load_from_png("textures/earthmap.png")
+                                    .expect("expected earthmap.png texture to exist in textures/"),
+                            ))),
+                        )));
+
+                        // a cube constructed of many small spheres
+                        let mut cube_pieces: Vec<Box<dyn Hittable>> = Vec::new();
+                        for _ in 0..1000 {
+                            cube_pieces.push(Box::new(Sphere::stationary(
+                                Point3::random(0.0, 165.0),
+                                10.0,
+                                Box::new(DiffuseLambertian::new(Color::new(0.73, 0.73, 0.73))),
+                            )));
+                        }
+                        world.push(Box::new(Translate::new(
+                            Vec3::new(-100.0, 270.0, 395.0),
+                            RotateY::new(15.0, BvhNode::new(cube_pieces, 0.0, 1.0)),
+                        )));
+
+                        BvhNode::new(world, 0.0, 1.0)
+                    },
+                }
+            }
         }
     }
 }
