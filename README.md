@@ -2,6 +2,8 @@
 
 is a raytracer written in Rust, with the core ray tracing mechanics adhering fairly closely to [Ray Tracing in One Weekend](https://raytracing.github.io/).
 
+![GIF showing incremental rendering in action](/../media/incremental-rendering.gif?raw=true "Demo of incremental rendering for terminal and UI")
+
 The primary differences from the "original" are:
 
 1. It's written in Rust (obviously) instead of C++
@@ -9,6 +11,10 @@ The primary differences from the "original" are:
 3. A few more rendering scenes have been added
 4. Terminal progress display: the scene is incrementally rendered in ascii-art-lite in your terminal as it is computed
 5. A GUI is provided for tweaking various camera, scene, and other configuration settings (using [egui](https://github.com/emilk/egui)), with the resulting image being displayed in the GUI too.
+
+Here's a screenshot showing most of the fancy features:
+
+![Screenshot showing UI with rendered scene](/../media/ui-screenshot.png?raw=true "Demo scene shown with UI")
 
 ## Prereqs
 
